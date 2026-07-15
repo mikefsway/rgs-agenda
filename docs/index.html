@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traverse — your route through RGS-IBG 2026</title>
+<meta name="description" content="Paste your research interests and goals; get a personalised route through the 623 sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs entirely in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23b0006d' stroke-width='14'/><circle cx='50' cy='50' r='9' fill='%23b0006d'/></svg>">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="sheet-label">
+    <span class="mono">SHEET AC2026</span>
+    <span class="mono">LONDON · 51°30′N 0°10′W</span>
+  </div>
+  <h1>Traverse</h1>
+  <p class="standfirst">A personalised route through the <strong>623 sessions</strong> of the
+  RGS-IBG Annual International Conference, 1–4 September 2026.</p>
+  <p class="privacy-note">Everything runs in your browser. What you type or paste is matched locally
+  against the public programme and <strong>never leaves this device</strong>.</p>
+</header>
+
+<main>
+<section class="panel" id="profile-panel" aria-labelledby="profile-h">
+  <h2 id="profile-h"><span class="waypoint-dot" aria-hidden="true"></span>Your interests and goals</h2>
+  <p class="hint">Paste anything that describes your work — a bio, a Google Scholar or staff profile,
+  an abstract of your own — and add what you want from the conference in your own words.
+  More text gives better matches.</p>
+  <textarea id="interests" rows="9" spellcheck="false"
+    placeholder="e.g. I research household energy demand and the fairness of time-of-use tariffs… At the conference I want to meet people working on energy justice and find methods sessions on longitudinal surveys."></textarea>
+
+  <div class="controls">
+    <fieldset>
+      <legend>Days</legend>
+      <label><input type="checkbox" name="day" value="2026-09-01"> Tue 1</label>
+      <label><input type="checkbox" name="day" value="2026-09-02" checked> Wed 2</label>
+      <label><input type="checkbox" name="day" value="2026-09-03" checked> Thu 3</label>
+      <label><input type="checkbox" name="day" value="2026-09-04" checked> Fri 4</label>
+    </fieldset>
+    <fieldset>
+      <legend>Attendance</legend>
+      <label><input type="radio" name="mode" value="any" checked> Any</label>
+      <label><input type="radio" name="mode" value="inperson"> In person</label>
+      <label><input type="radio" name="mode" value="online"> Online / hybrid</label>
+    </fieldset>
+  </div>
+
+  <div class="actions">
+    <button id="plan-btn" class="primary" type="button">Chart my route</button>
+    <span id="status" class="mono" role="status" aria-live="polite"></span>
+  </div>
+  <div class="fraglet-row">
+    <button id="save-fraglet" class="ghost" type="button" hidden>Download profile (fraglet JSON)</button>
+    <span class="hint" id="fraglet-hint" hidden>Saved in this browser as a private
+      <a href="https://fraglet.org" rel="noopener">fraglet</a> — a portable preference profile you own.</span>
+  </div>
+</section>
+
+<section id="results" hidden aria-labelledby="results-h">
+  <h2 id="results-h" class="visually-hidden">Your route</h2>
+  <nav id="day-tabs" class="day-tabs" aria-label="Conference days"></nav>
+  <div id="overview"></div>
+  <div id="route"></div>
+</section>
+</main>
+
+<footer>
+  <p>Built from the <a href="https://event.ac2026.exordo.com/" rel="noopener">public draft programme</a>
+  (fetched July 2026 — check final times on Ex Ordo). Not affiliated with the RGS-IBG.
+  Matching is semantic and imperfect: treat this as a first draft of your diary, not the last word.</p>
+  <p class="mono">open source · no tracking · no account</p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
