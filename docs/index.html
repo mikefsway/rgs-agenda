@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Traverse — your route through RGS-IBG 2026</title>
-<meta name="description" content="Paste your research interests and goals; get a personalised route through the 623 sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs entirely in your browser.">
+<meta name="description" content="Paste your research interests and goals; get a personalised route through the sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs entirely in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,7 +19,7 @@
     <span class="mono">LONDON · 51°30′N 0°10′W</span>
   </div>
   <h1>Traverse</h1>
-  <p class="standfirst">A personalised route through the <strong>623 sessions</strong> of the
+  <p class="standfirst">A personalised route through the <strong><span id="n-sessions">600+</span> sessions</strong> of the
   RGS-IBG Annual International Conference, 1–4 September 2026.</p>
   <p class="privacy-note">Everything runs in your browser. What you type or paste is matched locally
   against the public programme and <strong>never leaves this device</strong>.</p>
@@ -28,19 +28,20 @@
 <main>
 <section class="panel" id="profile-panel" aria-labelledby="profile-h">
   <h2 id="profile-h"><span class="waypoint-dot" aria-hidden="true"></span>Your interests and goals</h2>
-  <p class="hint">Two boxes, two different jobs. The first says where you've been, the second says
-  where you're going — sessions that match <em>both</em> are the ones worth crossing the building for.</p>
+  <p class="hint">Fill in either box, ideally both. Sessions that match your past work
+  <em>and</em> your current plans rise to the top.</p>
 
   <label class="box-label" for="works">What you've worked on</label>
-  <p class="hint">Paste a Google Scholar profile, a publication list, or a bio. A Scholar paste is
-  cleaned to titles automatically — authors, journals and citation counts are stripped before matching.</p>
+  <p class="hint">Paste your Google Scholar profile (select the publication table and copy),
+  a publication list, or a bio. Scholar pastes get cleaned up automatically — authors, journals
+  and citation counts are stripped before matching.</p>
   <textarea id="works" rows="7" spellcheck="false"
-    placeholder="Paste your Google Scholar profile here — select the publication table and copy. Or paste a bio, a staff page, an abstract of your own."></textarea>
+    placeholder="Paste your Google Scholar profile, a publication list, or a short bio."></textarea>
   <p class="parse-note" id="works-note" hidden></p>
 
-  <label class="box-label" for="goals">What you're working on now — and what you want from these four days</label>
-  <p class="hint">In your own words. No publication list can tell us this, so a couple of real sentences
-  here shift the route more than another twenty papers will.</p>
+  <label class="box-label" for="goals">What you're working on now, and what you want from the week</label>
+  <p class="hint">Write it like you'd tell a colleague. Two or three sentences carry a lot of
+  weight here — this is the only place the matcher learns where you're heading.</p>
   <textarea id="goals" rows="4" spellcheck="false"
     placeholder="e.g. I'm moving from tariff design into energy justice fieldwork and want to find people doing longitudinal survey work in the Global South. Also hoping to meet potential postdoc hosts."></textarea>
 
@@ -67,24 +68,53 @@
   <div class="fraglet-row">
     <button id="save-fraglet" class="ghost" type="button" hidden>Download profile (fraglet JSON)</button>
     <span class="hint" id="fraglet-hint" hidden>Saved in this browser as a private
-      <a href="https://fraglet.org" rel="noopener">fraglet</a> — a portable preference profile you own.</span>
+      <a href="https://fraglet.org" rel="noopener">fraglet</a> — a portable profile you own.</span>
   </div>
 </section>
 
 <section id="results" hidden aria-labelledby="results-h">
   <h2 id="results-h" class="visually-hidden">Your route</h2>
-  <nav id="day-tabs" class="day-tabs" aria-label="Conference days"></nav>
+  <p id="restored-note" class="restored-note mono" hidden></p>
   <div id="overview"></div>
-  <div id="papers"></div>
-  <div id="route"></div>
+
+  <nav id="view-tabs" class="view-tabs" role="tablist" aria-label="Result views">
+    <button type="button" role="tab" data-view="route" aria-selected="true">Route</button>
+    <button type="button" role="tab" data-view="papers" aria-selected="false">Papers</button>
+    <button type="button" role="tab" data-view="people" aria-selected="false">People</button>
+    <button type="button" role="tab" data-view="lookup" aria-selected="false">Look up</button>
+  </nav>
+
+  <div id="view-route" class="view" role="tabpanel" aria-label="Route">
+    <div class="route-actions">
+      <nav id="day-tabs" class="day-tabs" aria-label="Conference days"></nav>
+      <button id="ics-btn" class="ghost" type="button">Download calendar (.ics)</button>
+    </div>
+    <div id="route"></div>
+  </div>
+
+  <div id="view-papers" class="view" role="tabpanel" aria-label="Papers" hidden>
+    <div id="papers"></div>
+  </div>
+
+  <div id="view-people" class="view" role="tabpanel" aria-label="People" hidden>
+    <div id="people"></div>
+  </div>
+
+  <div id="view-lookup" class="view" role="tabpanel" aria-label="Look up" hidden>
+    <label class="box-label" for="lookup-input">Look up a session</label>
+    <p class="hint">Wondering why something you saw on the programme isn't in your route?
+    Type part of its title or code to see where it ranked for you.</p>
+    <input id="lookup-input" type="search" spellcheck="false" placeholder="e.g. energy justice, PolGRG3">
+    <div id="lookup-out"></div>
+  </div>
 </section>
 </main>
 
 <footer>
   <p>Built from the <a href="https://event.ac2026.exordo.com/" rel="noopener">public draft programme</a>
   (fetched July 2026 — check final times on Ex Ordo). Not affiliated with the RGS-IBG.
-  Matching is semantic and imperfect: treat this as a first draft of your diary, not the last word.</p>
-  <p class="mono">open source · no tracking · no account</p>
+  Semantic matching gets things wrong; treat this as a first draft of your diary.</p>
+  <p class="mono">open source · no tracking · no account · works offline once loaded</p>
 </footer>
 
 <script type="module" src="app.js"></script>

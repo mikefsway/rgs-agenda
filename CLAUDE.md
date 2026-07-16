@@ -169,8 +169,39 @@ Two things that look like optimisations and aren't:
 If the wait ever does matter, the lever is caching vectors by title hash in
 `localStorage` — embeddings are deterministic, so a re-plan becomes free.
 
+## Persistence and caching — three layers, three invalidation rules
+
+- **The route** (`traverse.rgs2026.route.v1`) stores ids + display strings,
+  never session objects; sessions are re-joined to fresh data on load. It
+  carries a `dataSig` (`n_facets|n_sessions`) and is silently discarded on
+  mismatch — a route pointing at merged-away sessions is worse than no route.
+- **Profile embeddings** (`traverse.embcache.*`) are keyed by raw chunk text
+  and namespaced by model **and device**: webgpu-fp16 and wasm-q8 vectors agree
+  to ~2dp, not exactly, and mixing them shifts scores that everything
+  downstream reads as ranks. This cache is why a goals edit re-plans in <1s.
+- **The service worker** (`docs/sw.js`) serves same-origin stale-while-
+  revalidate: a deploy lands on the visit *after* next. When testing locally,
+  remember the browser's plain HTTP cache sits in front of everything —
+  python's http.server sends Last-Modified and Chromium heuristically caches
+  data files, which once served a 623-session sessions.json against a
+  621-session facets.json. `fetch(url, {cache: "reload"})` before measuring.
+
 ## Data
 
-Programme comes from the public Ex Ordo API (no auth). Rooms are allocated
-July 2026, so `docs/data/` needs a refresh before the conference — see README.
-`pipeline/embed.py` needs a venv with sentence-transformers.
+Programme comes from the public Ex Ordo API (no auth). Refreshed 16 July 2026;
+rooms were still "In-person N" placeholders then, so another refresh is due
+when real rooms land — see README. `pipeline/embed.py` needs a venv with
+sentence-transformers (`.venv-pipeline/` if it survived).
+
+The API has changed shape once already (page_size now clamped to 15, `date=`
+is the only working day filter, `expand[]=` 500s — dotted comma-separated
+paths work). The working fetch loop is documented in `pipeline/normalize.py`'s
+header; trust it over memory.
+
+Two id systems: `sessions[].id` is the virtual_published_content id (stable
+row identity, used for localStorage joins); `sessions[].eid` is the
+schedule_event id, which is what the public site routes on
+(`/session/<eid>/<slug>`). They differ for 606 of 621 sessions — linking on
+`id` gives you someone else's session. The public API publishes **no author
+names**, only presenting affiliations — hence the People tab is institutions
+and research groups, and says so.

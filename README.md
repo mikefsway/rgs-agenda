@@ -8,10 +8,13 @@ and genuine clashes surfaced rather than silently resolved.
 **Privacy model: everything runs in the browser.** The programme ships as
 precomputed embeddings; the user's text is embedded locally with
 [transformers.js](https://huggingface.co/docs/transformers.js) (bge-small,
-~30 MB, cached after first visit) and never leaves the device. No account, no
-tracking, no server. The profile is stored in `localStorage` as a
-fraglet-shaped JSON (`{title, brief, detail, category, domain, tags,
-visibility: "private"}`) and can be downloaded; see [fraglet.org](https://fraglet.org).
+~30 MB, cached after first visit; WebGPU where available, wasm otherwise) and
+never leaves the device. No account, no tracking, no server. The profile is
+stored in `localStorage` as a fraglet-shaped JSON (`{title, brief, detail,
+category, domain, tags, visibility: "private"}`) and can be downloaded; see
+[fraglet.org](https://fraglet.org). The computed route and the profile's
+embeddings persist locally too, and a service worker caches the shell and
+data — so on conference wifi (or none) the page opens straight to your route.
 
 ## Architecture
 
@@ -22,8 +25,9 @@ pipeline/            build-time, runs on any machine with Python
 docs/                the static site (GitHub Pages serves this directory)
   index.html/app.js/style.css
   scholar.js             deterministic cleanup for pasted publication lists
-  data/sessions.json     623 sessions, 2,077 paper titles (1.7 MB)
-  data/embeddings.bin    3,204 facets x 384 dims, float16 (2.5 MB)
+  sw.js                  service worker: shell + data cached for offline use
+  data/sessions.json     621 sessions, 2,074 paper titles (1.7 MB)
+  data/embeddings.bin    3,198 facets x 384 dims, float16 (2.5 MB)
   data/facets.json       row -> session mapping + evidence labels
 test/                node test/parse.test.mjs — no deps, no runner
   fixtures/            a real Scholar profile; keep it real (see CLAUDE.md)
@@ -83,22 +87,36 @@ fixed threshold badges everything or nothing.
 ### Agenda assembly
 
 - Sessions grouped into parallel timeslots (4 main blocks/day, ~45–53 options each).
-- Top pick per slot with evidence + match bar; next 3 as collapsible alternatives.
-- **Clash rule** (from gridflex-sim `household_flex`): if the top two scores are
-  within 0.03 and the match is strong, render a forked "genuine clash — your
-  call, not ours" with both options. Never auto-resolve.
-- Slots with no strong match are honestly labelled ("a good slot for coffee and corridors").
+- Top pick per slot with evidence, match bar, and the session's contents
+  (description + paper list + link to the official Ex Ordo page, which routes
+  on `eid`); next 3 as collapsible alternatives.
+- **Clash rule** (from gridflex-sim `household_flex`): if the gap between the
+  top two is in the closest fifth of the slots you're actually deciding
+  (a percentile, not a distance), render a fork with both options. Never
+  auto-resolve.
+- **Pins and dismissals**: "not this one" re-ranks the slot, "make this my
+  pick" resolves it; both persist and re-rank instantly from scores in memory.
+- Slots with no strong match are honestly labelled.
+- Results are tabbed: the **route**, the **closest papers** (paper-granular,
+  under the session aggregate), **people** (institutions by presenting
+  affiliation + RGS-IBG research groups — the public API has no author names),
+  and a **look-up** ("where did session X rank for me, and why").
+- **ICS export** of the chosen route; unresolved clashes export as two
+  overlapping events, which is what they are.
+- During 1–4 September the route marks the current/next slot and opens there.
 
 ## Data provenance
 
-Programme fetched July 2026 from the **public** Ex Ordo draft programme API
+Programme fetched 16 July 2026 from the **public** Ex Ordo draft programme API
 (`event.ac2026.exordo.com/api/virtual_published_contents`, no auth). Paper
 abstracts are blanked in the public API; matching uses session descriptions and
 paper titles. Author names are not published there either — only presenting
-affiliations. Re-run before the conference:
+affiliations. Rooms were still placeholders ("In-person 10") at that fetch;
+re-run once real rooms land:
 
 ```
-# fetch (see pipeline/normalize.py header for the curl loop)
+# fetch (see pipeline/normalize.py header — the API's paging and expand
+# syntax changed once already; the working parameters are documented there)
 python3 pipeline/normalize.py
 <venv-with-sentence-transformers>/bin/python pipeline/embed.py
 ```
@@ -120,8 +138,9 @@ python3 pipeline/normalize.py
 - [ ] Opt-in "save to fraglet.com" via api.fraglet.org (private by default).
 - [ ] MCP server exposing the same catalogue+scores so agents can plan
   agendas (serve data, not prose).
-- [ ] ICS export of the chosen route.
-- [ ] Refresh data when the final programme lands (rooms allocated July 2026).
+- [x] ICS export of the chosen route.
+- [x] Refresh data (done 16 July 2026 — two sessions merged away, a few papers
+  moved). Rooms are still placeholders; refresh again when they're real.
 - [ ] Generalise: any Ex Ordo-hosted conference is ingestible the same way.
 
 Not affiliated with the RGS-IBG. Times shown in Europe/London; always check the
