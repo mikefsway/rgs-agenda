@@ -1,5 +1,16 @@
 """Normalize raw Ex Ordo day dumps into docs/data/sessions.json.
 
+Fetching (July 2026 API behaviour — it has changed once already):
+  - day filter is `date=YYYY-MM-DD`; `day=`/`starts_at=` are silently ignored
+  - `page_size` is clamped to 15 server-side (it used to honour 999), so loop
+    `page=1..page_count` and concatenate the `data` arrays into one dump per day
+  - expansion is comma-separated dotted paths, NOT `expand[]=` (that 500s):
+
+      expand=virtual_content.schedule_event.schedule_event_presentations.paper.paper_authors,virtual_venue
+
+  e.g. per day:
+      https://event.ac2026.exordo.com/api/virtual_published_contents?date=2026-09-02&page=N&page_size=15&expand=...
+
 Input:  data/raw/day_YYYY-MM-DD.json  (public API: virtual_published_contents)
 Output: docs/data/sessions.json — one record per session, HTML stripped,
         mode (in-person/online/hybrid) lifted out of the title prefix.
@@ -71,6 +82,10 @@ def main() -> None:
             group = (CODE_GROUP.match(code).group(1).upper() if code and CODE_GROUP.match(code) else "")
             sessions.append({
                 "id": rec["id"],
+                # schedule_event id — the one the public site routes on
+                # (event.ac2026.exordo.com/session/<eid>/<slug>), distinct from
+                # rec["id"] for most sessions.
+                "eid": se.get("id"),
                 "code": code,
                 "group": group,
                 "title": title,
