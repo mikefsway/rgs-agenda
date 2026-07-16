@@ -17,8 +17,9 @@ const FRAGLET_KEY = "traverse.rgs2026.fraglet";
 const $ = (sel) => document.querySelector(sel);
 const statusEl = $("#status");
 
-let DATA = null;      // { sessions, facets, matrix (Float32Array), dim, meta }
-let embedder = null;  // async (texts, kind) => Float32Array[]
+let DATA = null;          // { sessions, facets, matrix (Float32Array), dim, meta }
+let dataPromise = null;
+let embedderPromise = null;  // resolves to async (texts, kind) => Float32Array[]
 
 // ---------- data loading ----------
 
@@ -36,8 +37,14 @@ function f16ToF32(u16) {
   return out;
 }
 
-async function loadData() {
-  if (DATA) return DATA;
+function loadData() {
+  if (!dataPromise) {
+    dataPromise = fetchData().catch((e) => { dataPromise = null; throw e; });
+  }
+  return dataPromise;
+}
+
+async function fetchData() {
   setStatus("loading programme…");
   const [meta, sessionsDoc, facets, binBuf] = await Promise.all([
     fetch("data/meta.json").then((r) => r.json()),
@@ -50,8 +57,14 @@ async function loadData() {
   return DATA;
 }
 
-async function loadEmbedder() {
-  if (embedder) return embedder;
+function loadEmbedder() {
+  if (!embedderPromise) {
+    embedderPromise = buildEmbedder().catch((e) => { embedderPromise = null; throw e; });
+  }
+  return embedderPromise;
+}
+
+async function buildEmbedder() {
   setStatus("loading language model (~30 MB, first visit only)…");
   const { pipeline } = await import(TRANSFORMERS_CDN);
   const fe = await pipeline("feature-extraction", EMBED_MODEL, {
@@ -62,14 +75,13 @@ async function loadEmbedder() {
       }
     },
   });
-  embedder = async (texts, kind) => {
+  return async (texts, kind) => {
     const prefix = kind === "query" ? DATA.meta.query_prefix : "";
     const out = await fe(texts.map((t) => prefix + t), { pooling: "mean", normalize: true });
     const [n, d] = out.dims;
     const flat = out.data;
     return Array.from({ length: n }, (_, i) => flat.slice(i * d, (i + 1) * d));
   };
-  return embedder;
 }
 
 // ---------- profile ----------
@@ -293,10 +305,10 @@ async function plan() {
   btn.disabled = true;
   try {
     await loadData();
-    await loadEmbedder();
+    const embed = await loadEmbedder();
     setStatus("reading your interests…");
     const chunks = chunkText(text);
-    const queryVecs = await embedder(chunks, "query");
+    const queryVecs = await embed(chunks, "query");
     setStatus("charting the route…");
     await new Promise((r) => setTimeout(r, 30)); // let status paint
     const results = scoreSessions(queryVecs, chunks, { days, mode });
@@ -340,5 +352,10 @@ try {
   }
 } catch { /* ignore corrupt state */ }
 
-// warm the data cache in the background
-loadData().then(() => setStatus("")).catch(() => {});
+// warm the data and model caches in the background so "Chart my route" is
+// instant by the time the user has finished typing; errors here are ignored —
+// plan() retries with visible status if anything failed.
+loadData()
+  .then(() => { setStatus(""); return loadEmbedder(); })
+  .then(() => setStatus(""))
+  .catch(() => setStatus(""));
