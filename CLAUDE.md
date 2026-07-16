@@ -70,19 +70,36 @@ Two rules that look like they could be tightened but can't:
   venue names don't reliably contain volume numbers. That's the only thing that
   catches `Environment and Planning B: Urban Analytics and City Science`.
 
-## Performance
+## Performance — and why it's deliberately not optimised
 
-Measured on the real 67-title profile: **embedding ~6.5s, scoring+render ~0.3s.**
-The cost is essentially all in transformers.js, and it is linear in chunk count.
-So:
+Measured on the real 67-title profile: **embedding ~10s, scoring+render ~0.3s.**
+The cost is ~97% transformers.js and linear in chunk count (~150ms/title). The
+matching loop is free by comparison.
 
-- The `WORKS_MAX_TITLES` cap is protecting *embedding* time, not the matching
-  loop. Raising it costs ~150ms per extra title.
-- Anything that reduces the number of vectors *after* embedding (clustering,
-  merging, dedupe by similarity) saves from the 0.3s, not the 6.5s. It cannot pay
-  for itself.
-- The real lever, if this matters, is caching vectors by title in `localStorage`
-  so a re-plan is free.
+The call was made that a ~10s wait is fine **provided the user can see it
+working**, so the profile is effectively uncapped (`WORKS_MAX_TITLES = 120` is a
+backstop against a 500-paper paste, not an editorial choice) and the effort went
+into progress instead. `embedBatched` exists for that: batches of 8 with a
+`setTimeout(0)` yield between them. **The yield is load-bearing** — ONNX runs
+synchronously on the main thread, so without it the status text never repaints
+and the batching buys nothing. Longest silence is ~1.3s; before batching it was
+the whole 6.5s, which reads as a hang.
+
+Two things that look like optimisations and aren't:
+
+- **Clustering titles to reduce vectors cannot pay for itself.** You have to
+  embed all N to cluster them by vector similarity, so you've already spent the
+  10s before clustering starts; it only shrinks the input to the 0.3s scoring
+  loop. It also costs specificity — a centroid is a blurrier target than a title,
+  so a niche paper that would have surfaced one session gets averaged away.
+- **Near-duplicate titles are already harmless.** Scoring takes the *max* over
+  chunks per facet, and max is idempotent over near-parallel vectors: eight
+  papers on the same topic contribute exactly what one does. Redundancy costs
+  embedding time, not match quality. (This is the opposite of the packed-chunk
+  problem, where noise genuinely displaces signal.)
+
+If the wait ever does matter, the lever is caching vectors by title hash in
+`localStorage` — embeddings are deterministic, so a re-plan becomes free.
 
 ## Data
 

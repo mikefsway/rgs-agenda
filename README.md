@@ -53,9 +53,10 @@ and blended: `facet = w_works * best_works + w_goals * best_goals`.
   is cleaned deterministically to titles (authors, venues, citation counts and
   page furniture stripped; see `parseWorks` in `docs/app.js`), **one title per
   chunk**: packing unrelated titles into a 420-char chunk embeds the centroid of
-  a dozen topics and points nowhere. Titles are sorted newest-first, because
-  under a hard cap ordering *is* recency prioritisation. Anything that isn't a
-  publication list falls back to prose chunking.
+  a dozen topics and points nowhere. A normal profile goes in whole (the 120-title
+  cap is a backstop, not an editorial choice); titles are sorted newest-first so
+  that if the cap ever does bite, ordering *is* the recency prioritisation.
+  Anything that isn't a publication list falls back to prose chunking.
 
   Two rules there are structural rather than cosmetic, and both were found by
   running a real 68-article profile through it. `sliceToTable` drops everything

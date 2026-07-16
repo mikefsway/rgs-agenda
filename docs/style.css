@@ -81,6 +81,26 @@ main, footer { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
 }
 .hint { color: var(--ink-soft); font-size: 0.92rem; margin: 0.25rem 0 0.75rem; }
 
+/* The ticking count in #status is the real "it's working" signal; this just stops
+   a momentarily static line from reading as a hang. */
+body.working #status::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--magenta);
+  animation: working-pulse 1.1s ease-in-out infinite;
+}
+@keyframes working-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.25; transform: scale(0.65); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.working #status::before { animation: none; }
+}
+
 .box-label {
   display: block;
   font-family: "Archivo", system-ui, sans-serif;
