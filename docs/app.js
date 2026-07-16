@@ -144,14 +144,14 @@ function scoreSessions(queryVecs, chunks, filters) {
     fIdxs.sort((a, b) => bestSim[b] - bestSim[a]);
     const top = fIdxs.slice(0, 3).map((f) => bestSim[f]);
     const score = 0.75 * top[0] + 0.25 * (top.reduce((a, b) => a + b, 0) / top.length);
-    const evidence = fIdxs.slice(0, 2)
-      .filter((f) => bestSim[f] > 0.35)
-      .map((f) => ({
-        kind: DATA.facets[f].kind,
-        label: DATA.facets[f].label,
-        sim: bestSim[f],
-        chunk: chunks[bestChunk[f]],
-      }));
+    const evidence = [];
+    for (const f of fIdxs) {
+      if (evidence.length >= 2 || bestSim[f] <= 0.35) break;
+      const kind = DATA.facets[f].kind;
+      // at most one "session theme" line; papers are individually informative
+      if (kind === "session" && evidence.some((e) => e.kind === "session")) continue;
+      evidence.push({ kind, label: DATA.facets[f].label, sim: bestSim[f], chunk: chunks[bestChunk[f]] });
+    }
     results.push({ session: sess, score, evidence });
   }
   results.sort((a, b) => b.score - a.score);
@@ -167,10 +167,12 @@ function modeAllowed(mode, filter) {
 
 // ---------- agenda assembly ----------
 
-// Socials, placeholders and admin slots carry almost no text, so any match
-// against them is noise — never present one as a recommendation.
+// Socials, receptions, placeholders and admin slots aren't content — any
+// semantic match against them is noise, so never present one as a
+// recommendation (they still appear as "closest is …" in weak slots).
+const ADMIN_TITLE = /\b(social|reception|drinks|welcome|placeholder|place ?holder|business meeting|agm|prize|awards)\b/i;
 function isAdminSession(s) {
-  return s.papers.length === 0 && s.description.length < 200;
+  return s.papers.length === 0 && (s.description.length < 200 || ADMIN_TITLE.test(s.title));
 }
 
 function buildAgenda(results) {
