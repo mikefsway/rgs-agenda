@@ -33,7 +33,9 @@ const CLASH_PCTL = 0.2;
 const CLASH_MIN_SLOTS = 4;
 const WEAK_REL = 0.55;           // below this normalized score, a slot is "no strong match"
 const FRAGLET_KEY = "traverse.rgs2026.fraglet";
-const ROUTE_KEY = "traverse.rgs2026.route.v1";
+// v2: v1 routes carried no record of the profile that produced them, so a
+// route charted from anyone's (or a broken backend's) input restored as yours.
+const ROUTE_KEY = "traverse.rgs2026.route.v2";
 
 // RGS-IBG research group codes (session-code prefixes) to official names.
 // POPGRGE is PopGRG's evening social, not a separate group.
@@ -156,7 +158,22 @@ let EMB_DEVICE = "wasm-q8";
  * passing by chance is ~1e-6. Rank-based on purpose: absolute cosine
  * thresholds over bge scores are banned in this codebase, and NaN must fail,
  * hence the explicit finiteness check (NaN compares false against everything,
- * which would otherwise count as "nothing ranked above me"). */
+ * which would otherwise count as "nothing ranked above me").
+ *
+ * The check must exercise the path the app actually uses, not a convenient
+ * proxy. Profile text is embedded with the bge query prefix, in batches padded
+ * to their longest member — a backend can embed short bare titles correctly
+ * and still garble prefixed or long-padded input, and fp16 numeric trouble is
+ * more likely on longer sequences. So each probe runs twice — bare (exact
+ * ground truth) and prefixed (the real path; measured self-rank #1 of 3198 at
+ * ~0.90 cosine on wasm-q8) — and both batches carry a long filler text so the
+ * padding matches what profile embedding produces. */
+const SELF_CHECK_FILLER =
+  "I am broadly interested in the social dimensions of energy systems and technology adoption, " +
+  "and this year I am particularly keen to understand how researchers across human geography are " +
+  "using artificial intelligence and machine learning in their methods, as well as sessions about " +
+  "research careers, publishing, impact, and building collaborations across disciplines and institutions.";
+
 async function embedderSelfCheck(embed) {
   await loadData();
   const { facets, matrix, dim } = DATA;
@@ -164,20 +181,23 @@ async function embedderSelfCheck(embed) {
   for (let i = 0; i < facets.length; i++) if (facets[i].kind === "paper") papers.push(i);
   if (!papers.length) return true;
   const probes = [...new Set([papers[0], papers[Math.floor(papers.length / 2)], papers[papers.length - 1]])];
-  const vecs = await embed(probes.map((i) => facets[i].label), "passage");
+  const texts = [...probes.map((i) => facets[i].label), SELF_CHECK_FILLER];
   const allowed = Math.max(3, Math.floor(facets.length * 0.01));
-  for (let p = 0; p < probes.length; p++) {
-    const v = vecs[p];
-    let self = 0;
-    const off = probes[p] * dim;
-    for (let k = 0; k < dim; k++) self += matrix[off + k] * v[k];
-    if (!Number.isFinite(self)) return false;
-    let above = 0;
-    for (let f = 0; f < facets.length; f++) {
-      let dot = 0;
-      const o = f * dim;
-      for (let k = 0; k < dim; k++) dot += matrix[o + k] * v[k];
-      if (dot > self && ++above >= allowed) return false;
+  for (const kind of ["passage", "query"]) {
+    const vecs = await embed(texts, kind);
+    for (let p = 0; p < probes.length; p++) {
+      const v = vecs[p];
+      let self = 0;
+      const off = probes[p] * dim;
+      for (let k = 0; k < dim; k++) self += matrix[off + k] * v[k];
+      if (!Number.isFinite(self)) return false;
+      let above = 0;
+      for (let f = 0; f < facets.length; f++) {
+        let dot = 0;
+        const o = f * dim;
+        for (let k = 0; k < dim; k++) dot += matrix[o + k] * v[k];
+        if (dot > self && ++above >= allowed) return false;
+      }
     }
   }
   return true;
@@ -238,7 +258,23 @@ async function buildEmbedder() {
  * goals box cheap: a re-plan re-embeds one sentence, not 67 titles. */
 const EMB_CACHE_MAX = 400;
 
-function embCacheKey() { return `traverse.embcache.${EMBED_MODEL}.${EMB_DEVICE}.${dataSig()}`; }
+/* v2: v1 caches predate the backend self-check, so they can hold vectors
+ * written by a broken backend — on at least one machine an entire profile was
+ * cached as garbage under webgpu-fp16, and a cache hit bypasses the (now
+ * verified) live embedder entirely. A cache namespace is only trustworthy if
+ * everything ever written to it came from a verified backend, so pre-check
+ * namespaces are dead, not migratable. */
+function embCacheKey() { return `traverse.embcache.v2.${EMBED_MODEL}.${EMB_DEVICE}.${dataSig()}`; }
+
+// One-time sweep of the untrusted pre-check caches (and the v1 route below).
+try {
+  for (const k of Object.keys(localStorage)) {
+    if (k.startsWith("traverse.embcache.") && !k.startsWith("traverse.embcache.v2.")) {
+      localStorage.removeItem(k);
+    }
+  }
+  localStorage.removeItem("traverse.rgs2026.route.v1");
+} catch { /* storage disabled — nothing to sweep */ }
 
 function b64FromVec(v) {
   const u8 = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
@@ -785,10 +821,22 @@ function buildAgenda(results, prefs) {
  * the lot rather than showing a route built from data that no longer exists. */
 const slimCredit = ({ label, chunk, sole }) => ({ label, chunk, sole });
 
+// Identity of the input that produced a route. djb2 over both boxes — not for
+// security, just so a saved route can prove it belongs to the profile on
+// screen before it renders as "Your route".
+function profileSig(works, goals) {
+  const s = `${works}\u0000${goals}`;
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
 function saveRoute() {
   if (!STATE) return;
   const slim = {
     dataSig: dataSig(),
+    profileSig: STATE.profileSig,
+    device: STATE.device,
     chartedAt: STATE.chartedAt,
     filters: { days: [...STATE.filters.days], mode: STATE.filters.mode },
     weights: STATE.weights,
@@ -808,6 +856,14 @@ function restoreRoute() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(ROUTE_KEY) || "null"); } catch { return false; }
   if (!saved || saved.dataSig !== dataSig() || !saved.results?.length) return false;
+  // A route may only render as "Your route" for the profile that produced it.
+  // The boxes are refilled from the fraglet before this runs, so a mismatch
+  // means the input changed since charting — discard rather than masquerade.
+  const sig = profileSig($("#works").value.trim(), $("#goals").value.trim());
+  if (saved.profileSig !== sig) {
+    try { localStorage.removeItem(ROUTE_KEY); } catch { /* fine */ }
+    return false;
+  }
   const results = saved.results
     .map((r) => (DATA.byId.has(r.id) ? { ...r, session: DATA.byId.get(r.id) } : null))
     .filter(Boolean);
@@ -823,6 +879,8 @@ function restoreRoute() {
     choices: new Map(Object.entries(saved.choices || {}).map(([k, v]) => [k, Number(v)])),
     dismissed: new Set(saved.dismissed || []),
     chartedAt: saved.chartedAt,
+    profileSig: saved.profileSig,
+    device: saved.device,
   };
   renderAll({ restored: true });
   return true;
@@ -1337,6 +1395,8 @@ async function plan() {
       choices: new Map(),
       dismissed: new Set(),
       chartedAt: new Date().toISOString(),
+      profileSig: profileSig(worksRaw, goalsRaw),
+      device: EMB_DEVICE,
     };
     renderAll({ scroll: true });
     saveRoute();
