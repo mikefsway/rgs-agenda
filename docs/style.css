@@ -197,6 +197,32 @@ button.ghost:hover { background: var(--magenta-soft); }
 }
 .overview-card h3 { margin: 0 0 0.3rem; font-size: 1rem; }
 
+/* ---- papers closest to you ---- */
+.papers-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--contour);
+  padding: 0.9rem 1.1rem;
+  margin: 1rem 0 0;
+}
+.papers-card h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+.papers-card .hint { margin: 0 0 0.9rem; }
+.paper-list { margin: 0; padding-left: 1.5rem; }
+.paper-list li { margin: 0 0 0.9rem; }
+.paper-list li:last-child { margin-bottom: 0; }
+.paper-title { font-weight: 600; line-height: 1.3; }
+.paper-where { font-size: 0.8rem; color: var(--ink-soft); margin-top: 0.15rem; }
+.paper-why { font-size: 0.85rem; color: var(--ink-soft); margin-top: 0.25rem; }
+.paper-why .q { font-style: italic; }
+.paper-flag {
+  display: inline-block; margin-top: 0.4rem;
+  font-family: "IBM Plex Mono", monospace; font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 0.12rem 0.45rem;
+}
+.paper-flag.in-route { border: 1px solid var(--line); color: var(--ink-soft); }
+.paper-flag.catch { background: var(--magenta); color: #fff; }
+
 /* ---- the traverse (route line) ---- */
 .day-block { margin: 1.5rem 0 2.5rem; }
 .day-heading {
