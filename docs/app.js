@@ -137,9 +137,51 @@ function loadEmbedder() {
   return embedderPromise;
 }
 
-// Which backend actually built the vectors. fp16-on-GPU and q8-on-wasm agree
-// to ~2 decimal places, not exactly, so cached vectors must never cross over.
+// Which backend actually built the vectors. The two backends do not agree
+// exactly, so cached vectors must never cross over — and beyond that, a
+// backend's output cannot be assumed sane at all until it passes selfCheck
+// below. webgpu-fp16 in particular shipped unverified (no test machine here
+// has a GPU adapter) and on at least one real machine returned vectors that
+// ranked the whole programme as noise while the UI looked fine.
 let EMB_DEVICE = "wasm-q8";
+
+/* Trust no backend until it can find its own text.
+ *
+ * Every `kind: "paper"` facet was embedded from exactly its label (see
+ * pipeline/embed.py), so the shipped matrix holds ground truth for those
+ * strings. Embed a few of them as passages (no query prefix) and require each
+ * probe's own row to rank in the top slice of all rows. A healthy backend
+ * self-matches at ~0.92 cosine with nothing else close; a broken one returns
+ * vectors whose self-row lands at a uniformly random rank, so three probes
+ * passing by chance is ~1e-6. Rank-based on purpose: absolute cosine
+ * thresholds over bge scores are banned in this codebase, and NaN must fail,
+ * hence the explicit finiteness check (NaN compares false against everything,
+ * which would otherwise count as "nothing ranked above me"). */
+async function embedderSelfCheck(embed) {
+  await loadData();
+  const { facets, matrix, dim } = DATA;
+  const papers = [];
+  for (let i = 0; i < facets.length; i++) if (facets[i].kind === "paper") papers.push(i);
+  if (!papers.length) return true;
+  const probes = [...new Set([papers[0], papers[Math.floor(papers.length / 2)], papers[papers.length - 1]])];
+  const vecs = await embed(probes.map((i) => facets[i].label), "passage");
+  const allowed = Math.max(3, Math.floor(facets.length * 0.01));
+  for (let p = 0; p < probes.length; p++) {
+    const v = vecs[p];
+    let self = 0;
+    const off = probes[p] * dim;
+    for (let k = 0; k < dim; k++) self += matrix[off + k] * v[k];
+    if (!Number.isFinite(self)) return false;
+    let above = 0;
+    for (let f = 0; f < facets.length; f++) {
+      let dot = 0;
+      const o = f * dim;
+      for (let k = 0; k < dim; k++) dot += matrix[o + k] * v[k];
+      if (dot > self && ++above >= allowed) return false;
+    }
+  }
+  return true;
+}
 
 async function buildEmbedder() {
   setStatus("loading language model (~30 MB, first visit only)…");
@@ -149,29 +191,43 @@ async function buildEmbedder() {
       setStatus(`loading language model… ${Math.round(p.progress || 0)}%`);
     }
   };
-  let fe = null;
-  // WebGPU embeds the same profile in ~1s instead of ~10s where the browser
-  // supports it. Failures here are common (no adapter, driver quirks) and
-  // fine — the wasm path below is the one that always works.
-  if (navigator.gpu) {
-    try {
-      fe = await pipeline("feature-extraction", EMBED_MODEL, {
-        device: "webgpu", dtype: "fp16", progress_callback,
-      });
-      EMB_DEVICE = "webgpu-fp16";
-    } catch { fe = null; }
-  }
-  if (!fe) {
-    fe = await pipeline("feature-extraction", EMBED_MODEL, { dtype: "q8", progress_callback });
-    EMB_DEVICE = "wasm-q8";
-  }
-  return async (texts, kind) => {
+  const wrap = (fe) => async (texts, kind) => {
     const prefix = kind === "query" ? DATA.meta.query_prefix : "";
     const out = await fe(texts.map((t) => prefix + t), { pooling: "mean", normalize: true });
     const [n, d] = out.dims;
     const flat = out.data;
     return Array.from({ length: n }, (_, i) => new Float32Array(flat.slice(i * d, (i + 1) * d)));
   };
+  // WebGPU embeds the same profile in ~1s instead of ~10s where the browser
+  // supports it. Failures here are common (no adapter, driver quirks) and
+  // fine — the wasm path below is the one that always works. "Built without
+  // erroring" is not the same as "working": fp16 GPU inference can return
+  // finite garbage that scores every session as noise, so the pipeline is
+  // only trusted once it passes the self-check.
+  if (navigator.gpu) {
+    try {
+      const fe = await pipeline("feature-extraction", EMBED_MODEL, {
+        device: "webgpu", dtype: "fp16", progress_callback,
+      });
+      const embed = wrap(fe);
+      if (await embedderSelfCheck(embed)) {
+        EMB_DEVICE = "webgpu-fp16";
+        return embed;
+      }
+      console.warn("webgpu-fp16 embedder failed self-check; falling back to wasm");
+      try { await fe.dispose?.(); } catch { /* best effort */ }
+    } catch { /* fall through to wasm */ }
+  }
+  const fe = await pipeline("feature-extraction", EMBED_MODEL, { dtype: "q8", progress_callback });
+  EMB_DEVICE = "wasm-q8";
+  const embed = wrap(fe);
+  // No fallback left. Failing here almost certainly means the model and the
+  // shipped matrix disagree (torn cache, model bump without re-embedding) —
+  // a loud error beats silently ranking noise.
+  if (!(await embedderSelfCheck(embed))) {
+    throw new Error("embedding self-check failed: model output does not match shipped embeddings");
+  }
+  return embed;
 }
 
 // ---------- embedding cache ----------
