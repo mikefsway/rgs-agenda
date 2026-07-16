@@ -81,6 +81,33 @@ main, footer { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
 }
 .hint { color: var(--ink-soft); font-size: 0.92rem; margin: 0.25rem 0 0.75rem; }
 
+.box-label {
+  display: block;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-top: 1.4rem;
+}
+#profile-panel > .hint:first-of-type + .box-label { margin-top: 0.9rem; }
+
+.parse-note {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--magenta-soft);
+  border-left: 2px solid var(--magenta);
+}
+.parse-note strong { color: var(--ink); }
+.parse-note summary { cursor: pointer; color: var(--magenta); font-weight: 600; margin-top: 0.35rem; }
+.parsed-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.4rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.parsed-list li { margin: 0.15rem 0; }
+
 textarea {
   width: 100%;
   font: inherit;
@@ -198,6 +225,14 @@ details.alts summary {
   font-weight: 600; list-style-position: outside;
 }
 details.alts .pick { margin: 0.5rem 0; border-left: 3px solid var(--line); }
+
+.dual-flag {
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  background: var(--contour); color: #fff;
+  padding: 0.15rem 0.5rem; margin-bottom: 0.4rem;
+}
 
 .clash-flag {
   display: inline-block;
