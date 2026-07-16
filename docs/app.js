@@ -8,6 +8,8 @@
  * auto-resolved (household_flex Conflict pattern).
  */
 
+import { parseWorks } from "./scholar.js";
+
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6";
 const EMBED_MODEL = "Xenova/bge-small-en-v1.5";
 const CLASH_EPS = 0.03;          // top-2 scores this close = genuine clash
@@ -86,6 +88,9 @@ async function buildEmbedder() {
 
 // ---------- profile ----------
 
+// Prose chunking: adjacent sentences are usually about the same thing, so packing
+// them concentrates meaning. This assumption fails badly for title lists — see
+// parseWorks, which emits one title per chunk instead.
 function chunkText(text, maxLen = 420, maxChunks = 16) {
   const sentences = text.replace(/\s+/g, " ").split(/(?<=[.!?;])\s+|\n+/).filter((s) => s.trim().length > 2);
   const chunks = [];
@@ -98,11 +103,49 @@ function chunkText(text, maxLen = 420, maxChunks = 16) {
   return chunks.slice(0, maxChunks);
 }
 
-function buildFraglet(text, days, mode) {
+const WORKS_MAX_TITLES = 40;   // 40 short titles cost less to embed than 16 packed chunks
+const WORKS_MAX_PROSE = 12;
+const GOALS_MAX_CHUNKS = 6;
+const GOALS_MAX_WEIGHT = 0.5;
+const GOALS_FULL_WEIGHT_CHARS = 300;   // ~3 real sentences earns the goals box its full weight
+
+/* Split the score between the two boxes.
+ *
+ * The pools must stay separate: scoring takes the max over chunks per facet, so
+ * pooling 40 titles with 1 goals chunk would let volume silently become weight
+ * and the goals box would never win a facet. Blending per-source bests instead
+ * rewards *agreement* — a session both boxes reach outranks one either reaches
+ * alone, which is the whole point of asking twice. */
+function sourceWeights(worksChunks, goalsChunks, goalsRaw) {
+  if (!goalsChunks.length) return { works: 1, goals: 0 };
+  if (!worksChunks.length) return { works: 0, goals: 1 };
+  // Scale with what they actually wrote: one vague line shouldn't carry half the score.
+  const goals = GOALS_MAX_WEIGHT * Math.min(goalsRaw.trim().length / GOALS_FULL_WEIGHT_CHARS, 1);
+  return { works: 1 - goals, goals };
+}
+
+function buildProfile(worksRaw, goalsRaw) {
+  const parsed = parseWorks(worksRaw);
+  const worksChunks = parsed.kind === "works"
+    ? parsed.items.slice(0, WORKS_MAX_TITLES).map((it) => it.title)
+    : chunkText(worksRaw, 420, WORKS_MAX_PROSE);
+  const goalsChunks = chunkText(goalsRaw, 420, GOALS_MAX_CHUNKS);
+  return {
+    parsed,
+    works: { chunks: worksChunks, quoteLabel: parsed.kind === "works" ? "your paper" : "your profile" },
+    goals: { chunks: goalsChunks, quoteLabel: "your aims" },
+    weights: sourceWeights(worksChunks, goalsChunks, goalsRaw),
+  };
+}
+
+function buildFraglet(worksRaw, goalsRaw, days, mode) {
+  const brief = (goalsRaw || worksRaw).replace(/\s+/g, " ").slice(0, 160);
   return {
     title: "RGS-IBG 2026 conference interests",
-    brief: text.replace(/\s+/g, " ").slice(0, 160),
-    detail: text,
+    brief,
+    detail: [worksRaw, goalsRaw].filter(Boolean).join("\n\n"),
+    works: worksRaw,
+    goals: goalsRaw,
     category: "interests",
     domain: "conference",
     tags: ["rgs-ibg-2026", `mode:${mode}`, ...days.map((d) => `day:${d}`)],
@@ -114,21 +157,58 @@ function buildFraglet(text, days, mode) {
 
 // ---------- scoring (ucl-explorer facet aggregate) ----------
 
-function scoreSessions(queryVecs, chunks, filters) {
-  const { sessions, facets, matrix, dim } = DATA;
-  const nFacets = facets.length;
-  // best similarity + which chunk, per facet
-  const bestSim = new Float32Array(nFacets);
-  const bestChunk = new Int16Array(nFacets);
-  for (let q = 0; q < queryVecs.length; q++) {
-    const qv = queryVecs[q];
-    for (let f = 0; f < nFacets; f++) {
+const EV_MIN = 0.35;   // below this a facet isn't worth citing as evidence
+
+/* Dual-match cut-off.
+ *
+ * Not an absolute similarity: bge scores sit in a narrow, corpus-dependent band
+ * (almost every session clears 0.35 against almost any profile), so a fixed
+ * threshold flags either everything or nothing. Both boxes must instead land in
+ * the top slice of *their own* distribution over the candidate set, which keeps
+ * the badge rare and meaningful whatever the person pasted.
+ *
+ * Set high on purpose. The blend already floats dual matches to the top of each
+ * slot, so a looser cut-off badges nearly every pick and the eye stops seeing it.
+ * This marks only the standouts. */
+const DUAL_PCTL = 0.97;
+
+function percentile(values, p) {
+  if (!values.length) return Infinity;
+  const sorted = Float64Array.from(values).sort();
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+}
+
+// Best similarity + winning chunk per facet, for one source pool.
+function bestPerFacet(vecs) {
+  const { facets, matrix, dim } = DATA;
+  const sim = new Float32Array(facets.length);
+  const which = new Int16Array(facets.length).fill(-1);
+  for (let q = 0; q < vecs.length; q++) {
+    const qv = vecs[q];
+    for (let f = 0; f < facets.length; f++) {
       let dot = 0;
       const off = f * dim;
       for (let k = 0; k < dim; k++) dot += matrix[off + k] * qv[k];
-      if (dot > bestSim[f]) { bestSim[f] = dot; bestChunk[f] = q; }
+      if (dot > sim[f]) { sim[f] = dot; which[f] = q; }
     }
   }
+  return { sim, which };
+}
+
+function scoreSessions(profile, filters) {
+  const { sessions, facets } = DATA;
+  const nFacets = facets.length;
+  const w = profile.weights;
+  const W = { ...profile.works, best: bestPerFacet(profile.works.vecs) };
+  const G = { ...profile.goals, best: bestPerFacet(profile.goals.vecs) };
+
+  // Weights sum to 1, so the blend stays on the same 0–1 scale as a raw
+  // similarity — EV_MIN and the weak-slot threshold keep their calibration.
+  const facetScore = new Float32Array(nFacets);
+  for (let f = 0; f < nFacets; f++) {
+    facetScore[f] = w.works * W.best.sim[f] + w.goals * G.best.sim[f];
+  }
+
   // aggregate per session
   const perSession = new Map();
   for (let f = 0; f < nFacets; f++) {
@@ -141,19 +221,44 @@ function scoreSessions(queryVecs, chunks, filters) {
     const sess = sessions[si];
     if (!filters.days.has(sess.day)) continue;
     if (!modeAllowed(sess.mode, filters.mode)) continue;
-    fIdxs.sort((a, b) => bestSim[b] - bestSim[a]);
-    const top = fIdxs.slice(0, 3).map((f) => bestSim[f]);
+    fIdxs.sort((a, b) => facetScore[b] - facetScore[a]);
+    const top = fIdxs.slice(0, 3).map((f) => facetScore[f]);
     const score = 0.75 * top[0] + 0.25 * (top.reduce((a, b) => a + b, 0) / top.length);
+
+    // How hard each box lands on this session — not necessarily on the same facet
+    // (your paper may hit paper 3 while your aims hit the theme). Thresholded
+    // below, once the whole distribution is known.
+    let worksHit = 0, goalsHit = 0;
+    for (const f of fIdxs) {
+      if (W.best.sim[f] > worksHit) worksHit = W.best.sim[f];
+      if (G.best.sim[f] > goalsHit) goalsHit = G.best.sim[f];
+    }
+
     const evidence = [];
     for (const f of fIdxs) {
-      if (evidence.length >= 2 || bestSim[f] <= 0.35) break;
-      const kind = DATA.facets[f].kind;
+      if (evidence.length >= 2 || facetScore[f] <= EV_MIN) break;
+      const kind = facets[f].kind;
       // at most one "session theme" line; papers are individually informative
       if (kind === "session" && evidence.some((e) => e.kind === "session")) continue;
-      evidence.push({ kind, label: DATA.facets[f].label, sim: bestSim[f], chunk: chunks[bestChunk[f]] });
+      const from = [];
+      for (const src of [W, G]) {
+        if (src.best.sim[f] >= EV_MIN && src.best.which[f] >= 0) {
+          from.push({ label: src.quoteLabel, chunk: src.chunks[src.best.which[f]], sim: src.best.sim[f] });
+        }
+      }
+      from.sort((a, b) => b.sim - a.sim);
+      evidence.push({ kind, label: facets[f].label, score: facetScore[f], from });
     }
-    results.push({ session: sess, score, evidence });
+    results.push({ session: sess, score, evidence, worksHit, goalsHit, dual: false });
   }
+
+  // Second pass: the badge only means something once we know the spread.
+  if (w.works > 0 && w.goals > 0) {
+    const tw = percentile(results.map((r) => r.worksHit), DUAL_PCTL);
+    const tg = percentile(results.map((r) => r.goalsHit), DUAL_PCTL);
+    for (const r of results) r.dual = r.worksHit >= tw && r.goalsHit >= tg;
+  }
+
   results.sort((a, b) => b.score - a.score);
   return results;
 }
@@ -220,12 +325,17 @@ const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">"
 
 function evidenceHtml(ev) {
   if (!ev.length) return "";
-  const seenChunks = new Set();
+  const seen = new Set();
   const items = ev.map((e) => {
     const what = e.kind === "paper" ? `paper “${esc(trunc(e.label, 90))}”` : "the session theme";
-    const showChunk = !seenChunks.has(e.chunk);
-    seenChunks.add(e.chunk);
-    const from = showChunk ? ` — from your <span class="q">“${esc(trunc(e.chunk, 80))}”</span>` : "";
+    const parts = [];
+    for (const f of e.from) {
+      const key = `${f.label}|${f.chunk}`;
+      if (seen.has(key)) continue;   // don't quote the same line of input twice
+      seen.add(key);
+      parts.push(`${esc(f.label)} <span class="q">“${esc(trunc(f.chunk, 80))}”</span>`);
+    }
+    const from = parts.length ? ` — from ${parts.join(" and ")}` : "";
     return `<li><span class="why">Matches ${what}</span>${from}</li>`;
   });
   return `<ul class="evidence">${items.join("")}</ul>`;
@@ -237,6 +347,7 @@ function pickHtml(r, norm, { clash = false } = {}) {
   const s = r.session;
   const modeLabel = { "in-person": "in person", hybrid: "hybrid", online: "online", unspecified: "" }[s.mode];
   return `<article class="pick${clash ? " clash-a" : ""}">
+    ${r.dual ? `<span class="dual-flag">Your work and your aims both point here</span>` : ""}
     <h4>${esc(s.title)}</h4>
     <span class="meta mono">${[s.code, s.venue || "venue tbc", modeLabel, s.papers.length ? s.papers.length + " papers" : "panel/plenary"].filter(Boolean).map(esc).join(" · ")}</span>
     <div class="match-bar" role="img" aria-label="match strength ${Math.round(norm(r.score) * 100)} of 100"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
@@ -302,10 +413,35 @@ function render(results, agenda) {
 
 function setStatus(msg) { statusEl.textContent = msg; }
 
+// Live feedback on the works box. Cleanup is heuristic, so show what was read
+// rather than asking the user to trust it.
+function refreshWorksNote() {
+  const el = $("#works-note");
+  const raw = $("#works").value;
+  if (!raw.trim()) { el.hidden = true; return; }
+  const { kind, items } = parseWorks(raw);
+  el.hidden = false;
+  if (kind !== "works") {
+    el.innerHTML = "Read as free text. Paste a Google Scholar profile and it'll be cleaned to titles automatically.";
+    return;
+  }
+  const used = items.slice(0, WORKS_MAX_TITLES);
+  const years = items.map((i) => i.year).filter(Boolean);
+  const span = years.length ? ` spanning ${Math.min(...years)}–${Math.max(...years)}` : "";
+  const dropped = items.length - used.length;
+  const list = used.map((i) =>
+    `<li>${esc(i.title)}${i.year ? ` <span class="mono">${i.year}</span>` : ""}</li>`).join("");
+  el.innerHTML = `Cleaned to <strong>${items.length} title${items.length === 1 ? "" : "s"}</strong>${span} —
+    authors, journals and citation counts stripped.`
+    + (dropped ? ` Newest ${WORKS_MAX_TITLES} used, ${dropped} older dropped.` : "")
+    + `<details><summary>Check what was read</summary><ol class="parsed-list">${list}</ol></details>`;
+}
+
 async function plan() {
-  const text = $("#interests").value.trim();
-  if (text.length < 30) {
-    setStatus("tell us a bit more — a few sentences at least.");
+  const worksRaw = $("#works").value.trim();
+  const goalsRaw = $("#goals").value.trim();
+  if (worksRaw.length + goalsRaw.length < 30) {
+    setStatus("tell us a bit more — paste a profile, or a few sentences about your plans.");
     return;
   }
   const days = new Set([...document.querySelectorAll('input[name="day"]:checked')].map((i) => i.value));
@@ -317,16 +453,18 @@ async function plan() {
   try {
     await loadData();
     const embed = await loadEmbedder();
-    setStatus("reading your interests…");
-    const chunks = chunkText(text);
-    const queryVecs = await embed(chunks, "query");
+    setStatus("reading your profile…");
+    const profile = buildProfile(worksRaw, goalsRaw);
+    // Sequential, not Promise.all: one transformers.js pipeline, one call at a time.
+    profile.works.vecs = profile.works.chunks.length ? await embed(profile.works.chunks, "query") : [];
+    profile.goals.vecs = profile.goals.chunks.length ? await embed(profile.goals.chunks, "query") : [];
     setStatus("charting the route…");
     await new Promise((r) => setTimeout(r, 30)); // let status paint
-    const results = scoreSessions(queryVecs, chunks, { days, mode });
+    const results = scoreSessions(profile, { days, mode });
     if (!results.length) { setStatus("no sessions match those filters."); return; }
     const agenda = buildAgenda(results);
     render(results, agenda);
-    const fraglet = buildFraglet(text, [...days], mode);
+    const fraglet = buildFraglet(worksRaw, goalsRaw, [...days], mode);
     localStorage.setItem(FRAGLET_KEY, JSON.stringify(fraglet));
     $("#save-fraglet").hidden = false;
     $("#fraglet-hint").hidden = false;
@@ -353,13 +491,25 @@ function downloadFraglet() {
 $("#plan-btn").addEventListener("click", plan);
 $("#save-fraglet").addEventListener("click", downloadFraglet);
 
+let noteTimer = null;
+$("#works").addEventListener("input", () => {
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(refreshWorksNote, 250);
+});
+
 // restore a previous profile
 try {
   const saved = JSON.parse(localStorage.getItem(FRAGLET_KEY) || "null");
-  if (saved?.detail) {
-    $("#interests").value = saved.detail;
-    $("#save-fraglet").hidden = false;
-    $("#fraglet-hint").hidden = false;
+  if (saved) {
+    // pre-two-box profiles only have `detail`; it was whatever they pasted, so
+    // it belongs in the works box.
+    $("#works").value = saved.works ?? saved.detail ?? "";
+    $("#goals").value = saved.goals ?? "";
+    if (saved.works || saved.goals || saved.detail) {
+      $("#save-fraglet").hidden = false;
+      $("#fraglet-hint").hidden = false;
+      refreshWorksNote();
+    }
   }
 } catch { /* ignore corrupt state */ }
 

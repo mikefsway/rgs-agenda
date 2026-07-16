@@ -1,0 +1,298 @@
+Mike
+Review affiliation
+Help colleagues find you.
+Review public access
+Certain articles should be publicly available.
+Add co-authors
+We have co-authors suggestions.
+Cited by
+All    Since 2021
+Citations    2584    2051
+h-index    25    22
+i10-index    37    36
+0420210105315
+201520162017201820192020202120222023202420252026
+Public access
+View all
+45 articles
+1 article
+available
+not available
+Based on funding mandates
+Co-authors
+Gesche Huebner
+Gesche Huebner
+University of Exeter
+Following
+Michael J. Fell
+Michael J. Fell
+UCL Energy Institute
+Verified email at ucl.ac.uk - Homepage
+Energy
+Title
+Cited by
+Year
+Energy services: A conceptual review
+MJ Fell
+Energy research & social science 27, 129-140
+366    2017
+Flexibility Capital and Flexibility Justice in Smart Energy Systems
+G Powells, MJ Fell
+SocArXiv
+255    2019
+Consumer demand for time of use electricity tariffs: A systematized review of the empirical evidence
+ML Nicolson, MJ Fell, GM Huebner
+Renewable and Sustainable Energy Reviews 97, 276-289
+236    2018
+Public acceptability of domestic demand-side response in Great Britain: The role of automation and direct load control
+MJ Fell, D Shipworth, GM Huebner, CA Elwell
+Energy research & social science 9, 72-84
+219    2015
+Smart local energy systems (SLES): A framework for exploring transition, context, and impacts
+R Ford, C Maidment, C Vigurs, MJ Fell, M Morris
+Technological Forecasting and Social Change 166, 120612
+151    2021
+Children, parents and home energy use: Exploring motivations and limits to energy demand reduction
+MJ Fell, LF Chiu
+Energy Policy 65, 351-358
+95    2014
+Validity of energy social research during and after COVID-19: challenges, considerations, and responses
+MJ Fell, L Pagel, C Chen, MH Goldberg, M Herberz, GM Huebner, ...
+Energy Research & Social Science 68, 101646
+93    2020
+Social and economic value in emerging decentralized energy business models: A critical review
+S Adams, D Brown, JP Cárdenas Álvarez, R Chitchyan, MJ Fell, ...
+Energies 14 (23), 7864
+87    2021
+Domestic demand-side response with heat pumps: controls and tariffs
+T Sweetnam, M Fell, E Oikonomou, T Oreszczyn
+Building Research & Information 47 (4), 344-361
+84    2019
+Exploring perceived control in domestic electricity demand-side response
+MJ Fell, D Shipworth, GM Huebner, CA Elwell
+Technology Analysis & Strategic Management 26 (10), 1118-1130
+77    2014
+The economic impacts of open science: A rapid evidence assessment
+MJ Fell
+Publications 7 (3), 46
+75    2019
+Consumer demand for blockchain-enabled peer-to-peer electricity trading in the United Kingdom: An online survey experiment
+MJ Fell, A Schneiders, D Shipworth
+Energies 12 (20), 3913
+60    2019
+Peer-to-peer electricity trading and the sharing economy: Social, markets and regulatory perspectives
+A Schneiders, MJ Fell, C Nolden
+Energy Sources, Part B: Economics, Planning, and Policy 17 (1), 2050849
+57    2022
+Electric vehicle manufacturers' perceptions of the market potential for demand-side flexibility using electric vehicles in the United Kingdom
+J Earl, MJ Fell
+Energy policy 129, 646-652
+50    2019
+Demand response beyond the numbers: A critical reappraisal of flexibility in two United Kingdom field trials
+J Crawley, C Johnson, P Calver, M Fell
+Energy Research & Social Science 75, 102032
+47    2021
+Customer privacy concerns as a barrier to sharing data about energy use in smart local energy systems: A rapid realist review
+C Vigurs, C Maidment, M Fell, D Shipworth
+Energies 14 (5), 1285
+46    2021
+Capturing the distributional impacts of long-term low-carbon transitions
+MJ Fell, S Pye, I Hamilton
+Environmental Innovation and Societal Transitions 35, 346-356
+45    2020
+Defining characteristics of peer-to-peer energy trading, transactive energy, and community self-consumption: A review of literature and expert perspectives
+A Gorbatcheva, N Watson, A Schneiders, D Shipworth, MJ Fell
+Renewable and Sustainable Energy Reviews 202, 114672
+43    2024
+Pricing decisions in peer-to-peer and prosumer-centred electricity markets: Experimental analysis in Germany and the United Kingdom
+UJJ Hahnel, MJ Fell
+Renewable and Sustainable Energy Reviews 162, 112419
+37    2022
+Improving energy research practices: guidance for transparency, reproducibility and quality
+GM Huebner, MJ Fell, NE Watson
+Buildings & Cities 2 (1), 1-20
+37    2021
+Is it time? Consumers and time of use tariffs
+MJ Fell, M Nicolson, GM Huebner, D Shipworth
+Consumers and time of use tariffs. UCL Energy Institute, London. Available …
+36*    2015
+Taking charge: perceived control and acceptability of domestic demand-side response
+MJ Fell
+UCL (University College London)
+35    2016
+Just flexibility?
+MJ Fell
+Nature Energy 5 (1), 6-7
+33    2020
+Two energy suppliers are better than one: Survey experiments on consumer engagement with local energy in GB
+NE Watson, GM Huebner, MJ Fell, D Shipworth
+Energy Policy 147, 111891
+30    2020
+Knowing me, knowing you: the role of trust, locus of control and privacy concern in acceptance of domestic electricity demand-side response
+MJ Fell, D Shipworth, GM Huebner, CA Elwell
+European Council for an Energy Efficient Economy (ECEEE)
+25    2015
+A framework for understanding and conceptualising smart local energy systems
+R Ford, C Maidment, M Fell, C Vigurs, M Morris
+Strathclyde: EnergyREV, University of Strathclyde Publishing, 1-18
+24    2019
+Supporting solar energy coordination among communities
+G Panagiotidou, E Costanza, MJ Fell, F Samanani, H Knox
+Proceedings of the ACM on Interactive, Mobile, Wearable and Ubiquitous …
+20    2023
+Are we heading towards a replicability crisis in energy efficiency research? A toolkit for improving the quality, transparency and replicability of energy efficiency impact …
+GM Huebner, ML Nicolson, MJ Fell, H Kennard, S Elam, C Hanmer, ...
+20    2017
+Energising Health: A review of the health and care applications of smart meter data
+MJ Fell, H Kennard, GM Huebner, M Nicolson, S Elam, D Shipworth
+18    2017
+Solarclub: Supporting renewable energy communities through an interactive coordination system
+G Panagiotidou, E Costanza, K Potapov, S Nkatha, MJ Fell, F Samanani, ...
+Proceedings of the 2024 CHI conference on human factors in computing systems …
+16    2024
+The value of TOU tariffs in Great Britain: Insights for decision-makers
+R Hledik, W Gorman, N Irwin, M Fell, M Nicolson, G Huebner
+Citizen Advice, Final Report 1
+16    2017
+Defining peer-to-peer energy trading, community self-consumption and transactive energy models: Concept definition paper
+N Watson, A Gorbatcheva, A Schneiders, D Shipworth, MJ Fell
+Community Self-Consumption and Transactive Energy Models: Concept Definition …
+13    2022
+Anticipating distributional impacts of peer-to-peer energy trading: Inference from a realist review of evidence on Airbnb
+MJ Fell
+Cleaner and Responsible Consumption 2, 100013
+13    2021
+Realist approaches in energy research to support faster and fairer climate action
+MJ Fell, K Roelich, L Middlemiss
+Nature Energy 7 (10), 916-922
+12    2022
+Social impacts of peer-to-peer energy trading: a rapid realist review protocol
+MJ Fell
+SocArXiv
+12    2018
+Smart local energy systems as a societal project: Developing a Theory of Change
+MJ Fell, C Vigurs, C Maidment, D Shipworth
+Smart Energy 11, 100109
+11    2023
+Peer-to-peer energy trading and the sharing economy: Social, markets and regulatory perspectives
+A Schneiders, M Fell, C Nolden
+11    2021
+Response to “Vulnerability and resistance in the United Kingdom's smart meter transition”
+D Shipworth, MJ Fell, S Elam
+Energy Policy 124, 418-420
+8    2019
+Consumer preferences for business models with multiple electricity suppliers: Online choice experiments in the United Kingdom
+NE Watson, GM Huebner, MJ Fell, D Shipworth
+Energy Research & Social Science 109, 103403
+7    2024
+Post-pandemic recovery: How smart local energy systems can contribute
+MJ Fell, R Bray, R Ford, J Hardy, M Morris
+EnergyREV, University of Strathclyde Publishing: Glasgow, UK
+7    2020
+The history of heat-as-a-service for promoting domestic demand-side flexibility: Lessons from the case of Budget Warmth
+MJ Fell
+Revue d'Histoire de l'Énergie 5 (2), 1f-21f
+7    2020
+Future energy retail markets: stakeholder views on multiple electricity supplier models in the UK
+N Watson, G Huebner, M Fell, D Shipworth
+ECEEE 2022 Summer Study on Energy Efficiency
+6    2022
+Privacy and data sharing in smart local energy systems: Insights and recommendations
+C Maidment, C Vigurs, MJ Fell, D Shipworth
+University of Strathclyde Publishing: Glasgow, UK. URL: https://www …
+6    2020
+Energy social surveys replicated with Large Language Model agents
+MJ Fell
+Available at SSRN 4686345
+5    2024
+TReQ Tools: How to Improve Transparency, Reproducibility and Quality in Energy Research
+G Huebner, MJ Fell
+Figshare
+5    2020
+Energy justice and flexibility
+M Fell, G Powells, C Johnson, JPC Álvarez, JME Forero, SO Arango
+Handbook on Energy Justice, 40-64
+4    2023
+Building and unlocking flexibility with smart local energy systems (SLES)
+C Vigurs, C Maidment, M Fell, D Shipworth
+Energy Revolution Research Centre, Strathclyde, UK. University of …
+4    2022
+The Radio Teleswitch: An historical perspective on the roll-out of domestic load control
+MJ Fell
+9th International Conference on Energy Efficiency in Domestic Appliances And …
+4    2018
+How do we want to buy and sell electricity? Contrasting preferences from the United Kingdom and South Korea
+EJ Lim, MJ Fell, D Shipworth
+Energy Research & Social Science 125, 104072
+3    2025
+Make fun of your research
+MJ Fell, A Schneiders
+Nature Energy 5 (8), 552-554
+3    2020
+The demand side of energy security
+L Fletcher, S Bouzarovski, G Bridge, MC Brisbois, M Fell, T Foxon, ...
+2    2024
+Urban Energy Club-Final Report
+C Johnson, A Gorbatcheva, M Fell, N Watson, F Wight
+UK Power Networks
+2    2022
+Behaviour, practice–whatever? A theory-agnostic framework for describing and informing demand-side response
+MJ Fell, D Shipworth
+ECEEE Summer Study 2017 Proceedings, 1603-1612
+2    2017
+What works for multi-stakeholder, multi sector collaborations for smart local energy systems
+C Vigurs, C Maidment, M Fell, D Shipworth
+Energy Revolution Research Centre, Strathclyde, UK. University of …
+1    2022
+Disrupting markets with peer-to-peer energy trading
+A Schneiders, A Gorbatcheva, MJ Fell, D Shipworth
+Edward Elgar Publishing
+1    2021
+New energy downstream. Emerging business models and innovative best practices: an economic, institutional, and behavioral focus
+A Rubino, A Facchini, M Fell, M Giulietti, A Morone
+Energy Sources, Part B: Economics, Planning, and Policy 16 (11-12), 971-975
+1    2021
+Starting to join the dots: An interim review of EnergyREV insights
+C Vigurs, MJ Fell, C Maidment, D Shipworth
+Energy Revolution Research Centre, Strathclyde, UK. University of …
+1    2021
+Energy equity: A rapid evidence review focused on developed economies
+GAA Garavito, GW Warren, M Martiskainen, MJ Fell, GM Huebner
+Energy Research & Social Science 131, 104466
+2026
+Data Synergy in times of crisis
+S Higginson, C Jones, M Topouzi, G Huebner, M Fell
+European Council for an Energy-Efficient Economy
+2024
+Open science and the climate crisis
+MJ Fell, NE Watson, G Huebner
+PLOS Climate 3 (2), e0000336
+2024
+Data Synergy in times of crisis
+CM Jones, S Higginson, M Topouzi, G Huebner, M Fell
+eceee 2024 Summer Study on energy efficiency: sustainable, safe & secure …
+2024
+Strategy and Policy Statement for energy policy for Great Britain-consultation: Response from UCL Institute for Sustainable Resources and UCL Energy Institute
+J Watson, J Price, G Huebner, R Freeman, M Fell, O Broad, P Ekins, ...
+UCL Institute for Sustainable Resources
+2023
+Keynote: Toolkit for Transparency, Reproducibility & Quality in Energy Research​
+G Huebner, M Fell
+2021
+Transparency, Reproducibility and Quality in Applied Energy Research: Challenges and Solutions
+N Watson, G Huebner, M Fell
+2020
+How does the structure of distributed ledger technology-enabled retail markets impact on energy policy objectives?
+M Fell
+Event Horizon 2018
+2018
+What motivates retrofitting? Results of a nationally representative sample in Great Britain
+GM Huebner, M Fell, D Shipworth
+2015
+Living with a Chatbot: Supporting Energy Communities with a Conversational Coordination Interface
+M Giudici, K Potapov, E Costanza, G Panagiotidou, MJ Fell, F Samanani, ...
+Available at SSRN 6431042
+Call for Evidence: Potential impacts on consumers following market-wide settlement reform
+M Fell
+Articles 1–68
+PrivacyTermsHelp
