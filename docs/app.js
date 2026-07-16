@@ -167,6 +167,12 @@ function modeAllowed(mode, filter) {
 
 // ---------- agenda assembly ----------
 
+// Socials, placeholders and admin slots carry almost no text, so any match
+// against them is noise — never present one as a recommendation.
+function isAdminSession(s) {
+  return s.papers.length === 0 && s.description.length < 200;
+}
+
 function buildAgenda(results) {
   const min = Math.min(...results.map((r) => r.score));
   const max = Math.max(...results.map((r) => r.score));
@@ -182,16 +188,19 @@ function buildAgenda(results) {
   for (const [key, list] of [...slots.entries()].sort()) {
     const [day] = key.split("|");
     list.sort((a, b) => b.score - a.score);
-    const top = list[0];
-    const clash = list.length > 1 && list[1].score >= top.score - CLASH_EPS && norm(top.score) >= WEAK_REL;
+    const substantive = list.filter((r) => !isAdminSession(r.session));
+    const ranked = substantive.length ? substantive : list;
+    const top = ranked[0];
+    const weak = norm(top.score) < WEAK_REL || !substantive.length;
+    const clash = !weak && ranked.length > 1 && ranked[1].score >= top.score - CLASH_EPS;
     const slot = {
       start: top.session.start,
       end: top.session.end,
       parallel: list.length,
       pick: top,
-      clashWith: clash ? list[1] : null,
-      alternatives: list.slice(clash ? 2 : 1, clash ? 5 : 4),
-      weak: norm(top.score) < WEAK_REL,
+      clashWith: clash ? ranked[1] : null,
+      alternatives: ranked.slice(clash ? 2 : 1, clash ? 5 : 4),
+      weak,
       relStrength: norm(top.score),
     };
     if (!days.has(day)) days.set(day, []);
@@ -260,7 +269,7 @@ function slotHtml(slot, norm) {
 
 function render(results, agenda) {
   const { days, norm } = agenda;
-  const top5 = results.slice(0, 5);
+  const top5 = results.filter((r) => !isAdminSession(r.session)).slice(0, 5);
   $("#overview").innerHTML = `<div class="overview-card">
     <h3>If you only make five sessions</h3>
     ${top5.map((r) => `<div>• ${esc(r.session.title)} <span class="mono">(${fmtDay.format(new Date(r.session.start)).split(",")[0]} ${t(r.session.start)})</span></div>`).join("")}
