@@ -191,6 +191,29 @@ appears on the user's machine, ask *which backend* first: this Pi can't take
 the GPU path at all (headless Chromium's GPU process dies without a display;
 forced Vulkan hangs), so "works here" says nothing about webgpu.
 
+The first version of that check shipped and immediately taught two more
+lessons, the hard way, on the same user's machine:
+
+- **The check must exercise the path the app actually uses.** v1 probed bare
+  titles as passages; the profile is embedded with the bge query prefix, in
+  batches padded to their longest member. A backend can pass one and garble
+  the other. The check now runs every probe both ways — bare and prefixed —
+  with a long filler in each batch so the padding is realistic. Measured on
+  wasm-q8, prefixed probes still self-match at rank #1 of 3198, so the same
+  top-1% criterion covers both. Proxies lie; that includes the proxies inside
+  your own safety checks.
+- **A verified backend does not launder an unverified cache.** Profile vectors
+  are cached by raw chunk text, so the poisoned webgpu-fp16 cache from the
+  broken era produced 100% hits on a re-chart of the same profile — the fixed,
+  self-checked embedder never got asked. Any vector written before the check
+  existed is untrusted by construction, hence the `embcache.v2` namespace bump
+  and the startup sweep of pre-v2 keys. Same story for the saved route: v1
+  routes recorded nothing about the profile that produced them, so
+  `route.v2` carries a `profileSig` (djb2 of both boxes) and `restoreRoute`
+  refuses and deletes a route whose signature doesn't match the boxes on
+  screen. When a bug writes bad state, fixing the writer is half the job;
+  the other half is refusing to read what it already wrote.
+
 ## Persistence and caching — three layers, three invalidation rules
 
 - **The route** (`traverse.rgs2026.route.v1`) stores ids + display strings,

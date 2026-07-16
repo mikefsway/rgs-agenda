@@ -12,15 +12,23 @@
  * cache-first is safe there.
  */
 
-const CACHE = "traverse-v1";
+// v2: bumped for the embedding-backend fixes of 16 Jul 2026, and because a
+// version bump is the only way to guarantee every cached file comes from the
+// same deploy — v1 refreshed each file on its own schedule, so a stale
+// embeddings.bin could sit beside a fresh facets.json indefinitely.
+const CACHE = "traverse-v2";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",
 ];
 
 self.addEventListener("install", (e) => {
+  // cache: "reload" skips the browser's HTTP cache, so the shell is one
+  // coherent snapshot of the deploy, not a mix of whatever was lying around.
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then((c) => Promise.all(SHELL.map((u) => c.add(new Request(u, { cache: "reload" })))))
+      .then(() => self.skipWaiting())
   );
 });
 
