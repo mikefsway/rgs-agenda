@@ -139,13 +139,11 @@ function loadEmbedder() {
   return embedderPromise;
 }
 
-// Which backend actually built the vectors. The two backends do not agree
-// exactly, so cached vectors must never cross over — and beyond that, a
-// backend's output cannot be assumed sane at all until it passes selfCheck
-// below. webgpu-fp16 in particular shipped unverified (no test machine here
-// has a GPU adapter) and on at least one real machine returned vectors that
-// ranked the whole programme as noise while the UI looked fine.
-let EMB_DEVICE = "wasm-q8";
+// Which backend built the vectors. Only wasm-q8 exists now (see
+// buildEmbedder for the webgpu obituary), but the device stays in the cache
+// key: different backends do not agree exactly, so if one ever returns,
+// cached vectors must not cross over.
+const EMB_DEVICE = "wasm-q8";
 
 /* Trust no backend until it can find its own text.
  *
@@ -218,32 +216,17 @@ async function buildEmbedder() {
     const flat = out.data;
     return Array.from({ length: n }, (_, i) => new Float32Array(flat.slice(i * d, (i + 1) * d)));
   };
-  // WebGPU embeds the same profile in ~1s instead of ~10s where the browser
-  // supports it. Failures here are common (no adapter, driver quirks) and
-  // fine — the wasm path below is the one that always works. "Built without
-  // erroring" is not the same as "working": fp16 GPU inference can return
-  // finite garbage that scores every session as noise, so the pipeline is
-  // only trusted once it passes the self-check.
-  if (navigator.gpu) {
-    try {
-      const fe = await pipeline("feature-extraction", EMBED_MODEL, {
-        device: "webgpu", dtype: "fp16", progress_callback,
-      });
-      const embed = wrap(fe);
-      if (await embedderSelfCheck(embed)) {
-        EMB_DEVICE = "webgpu-fp16";
-        return embed;
-      }
-      console.warn("webgpu-fp16 embedder failed self-check; falling back to wasm");
-      try { await fe.dispose?.(); } catch { /* best effort */ }
-    } catch { /* fall through to wasm */ }
-  }
+  // wasm-q8 is the only backend. There used to be a webgpu-fp16 fast path
+  // here (~1s instead of ~10s); it was removed on 16 Jul 2026 after it kept
+  // producing topically-arbitrary routes on the one real GPU it ever met,
+  // through two rounds of self-check hardening — and no machine in this
+  // house can even take the GPU path, so it is unverifiable by construction.
+  // Do not bring it back without a way to test it on real adapters.
   const fe = await pipeline("feature-extraction", EMBED_MODEL, { dtype: "q8", progress_callback });
-  EMB_DEVICE = "wasm-q8";
   const embed = wrap(fe);
-  // No fallback left. Failing here almost certainly means the model and the
-  // shipped matrix disagree (torn cache, model bump without re-embedding) —
-  // a loud error beats silently ranking noise.
+  // Failing here almost certainly means the model and the shipped matrix
+  // disagree (torn cache, model bump without re-embedding) — a loud error
+  // beats silently ranking noise.
   if (!(await embedderSelfCheck(embed))) {
     throw new Error("embedding self-check failed: model output does not match shipped embeddings");
   }

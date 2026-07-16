@@ -182,10 +182,13 @@ exactly its label (see `pipeline/embed.py`), so the shipped matrix is ground
 truth for those strings — embed three of them and require each probe's own row
 to rank in the top 1% of all rows. Rank-based, per the no-absolute-cosines
 rule; a healthy backend self-matches at ~0.92 with nothing close, a broken one
-lands at a uniformly random rank. GPU failing → fall back to wasm; wasm
-failing → throw, because that means the model and the shipped matrix disagree
-(torn cache, model bump without re-embedding) and a loud error beats silently
-ranking noise. Session facets can't be probes — their embedded text has a
+lands at a uniformly random rank. wasm-q8 is now the *only* backend: the
+webgpu-fp16 fast path was removed outright on 16 Jul 2026 after it kept
+producing topically-arbitrary routes on the one real GPU it ever met, through
+two rounds of check-hardening — unverifiable speed is not a feature. The check
+stays for wasm; it failing → throw, because that means the model and the
+shipped matrix disagree (torn cache, model bump without re-embedding) and a
+loud error beats silently ranking noise. Session facets can't be probes — their embedded text has a
 description chunk appended, so label ≠ text. And when hunting a bug that only
 appears on the user's machine, ask *which backend* first: this Pi can't take
 the GPU path at all (headless Chromium's GPU process dies without a display;
