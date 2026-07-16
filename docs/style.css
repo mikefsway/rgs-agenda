@@ -178,6 +178,37 @@ button.ghost:hover { background: var(--magenta-soft); }
 .fraglet-row { margin-top: 0.9rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 .fraglet-row .hint { margin: 0; }
 
+/* ---- view tabs ---- */
+.view-tabs {
+  display: flex; gap: 0; margin: 1.5rem 0 0;
+  border-bottom: 2px solid var(--ink);
+  flex-wrap: wrap;
+}
+.view-tabs button {
+  font-family: "Archivo", sans-serif;
+  font-variation-settings: "wdth" 110;
+  font-weight: 700; font-size: 0.9rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border: none; background: none; color: var(--ink-soft);
+  padding: 0.55rem 1.1rem; cursor: pointer;
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+}
+.view-tabs button:hover { color: var(--ink); }
+.view-tabs button[aria-selected="true"] {
+  color: var(--magenta);
+  border-bottom-color: var(--magenta);
+}
+.view { padding-top: 0.5rem; }
+
+.restored-note { color: var(--ink-soft); margin: 1rem 0 0; }
+
+.route-actions {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 0.75rem; flex-wrap: wrap;
+}
+.route-actions .day-tabs { margin: 1rem 0 0.5rem; }
+.route-actions .ghost { margin-bottom: 0.5rem; }
+
 /* ---- day tabs ---- */
 .day-tabs { display: flex; gap: 0.5rem; margin: 1.5rem 0 0.5rem; flex-wrap: wrap; }
 .day-tabs button {
@@ -294,6 +325,88 @@ details.alts .pick { margin: 0.5rem 0; border-left: 3px solid var(--line); }
 .weak-slot { color: var(--ink-soft); font-size: 0.92rem; padding: 0.3rem 0; }
 .weak-slot .pick-inline { color: var(--ink); }
 
+/* ---- session contents ---- */
+details.contents { margin: 0.5rem 0 0.1rem; font-size: 0.9rem; }
+details.contents summary {
+  cursor: pointer; color: var(--ink-soft); font-weight: 600;
+}
+details.contents[open] summary { color: var(--magenta); }
+.sess-desc { color: var(--ink-soft); margin: 0.5rem 0; white-space: pre-line; }
+.sess-papers { margin: 0.4rem 0 0.4rem; padding-left: 1.4rem; }
+.sess-papers li { margin: 0.25rem 0; }
+.sess-papers .aff { color: var(--ink-soft); display: block; font-size: 0.7rem; }
+.sess-link { margin: 0.4rem 0 0.2rem; }
+
+/* ---- pin / dismiss ---- */
+.pick-controls { margin-top: 0.55rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+button.mini {
+  font-family: "IBM Plex Mono", monospace; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  background: none; border: 1px solid var(--line); color: var(--ink-soft);
+  padding: 0.2rem 0.6rem; cursor: pointer;
+}
+button.mini:hover { border-color: var(--magenta); color: var(--magenta); }
+.pin-chip {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+  background: var(--ink); color: var(--paper); padding: 0.15rem 0.5rem;
+}
+.hidden-note { color: var(--ink-soft); font-size: 0.8rem; margin-top: 0.4rem; }
+
+/* ---- now / next ---- */
+.now-chip {
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  background: var(--magenta); color: #fff;
+  padding: 0.15rem 0.5rem; margin-bottom: 0.3rem;
+}
+.now-chip.next { background: var(--contour); }
+.slot-now > .weak-slot, .slot-now .pick { border-left: 3px solid var(--magenta); }
+
+/* ---- people ---- */
+.people-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--contour);
+  padding: 0.9rem 1.1rem;
+  margin: 1rem 0 0;
+}
+.people-card h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+.people-card .hint { margin: 0 0 0.9rem; }
+.inst-list, .group-list { margin: 0; padding-left: 1.5rem; }
+.inst-list li, .group-list li { margin: 0 0 0.9rem; }
+.inst-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
+.inst-head .mono { color: var(--ink-soft); }
+.inst-papers { margin: 0.25rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; color: var(--ink-soft); }
+.inst-papers li { margin: 0.15rem 0; }
+.mini-session { font-size: 0.9rem; margin-top: 0.2rem; display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.mini-session .mono { color: var(--ink-soft); }
+
+/* ---- lookup ---- */
+#view-lookup input[type="search"] {
+  width: 100%;
+  font: inherit; color: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--card);
+}
+.lookup-hit {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+}
+.lookup-hit h4 { margin: 0 0 0.15rem; font-size: 1rem; line-height: 1.35; }
+.lookup-hit .mono { color: var(--ink-soft); font-size: 0.75rem; }
+.lookup-rank { font-size: 0.92rem; margin: 0.35rem 0 0.2rem; }
+
+.goals-nudge {
+  margin: 0.75rem 0 0; padding-top: 0.6rem;
+  border-top: 1px dashed var(--magenta);
+  font-size: 0.92rem;
+}
+
 footer { padding: 2rem 1.25rem 3rem; color: var(--ink-soft); font-size: 0.88rem; }
 footer a, .panel a { color: var(--magenta); }
 
@@ -311,4 +424,23 @@ footer a, .panel a { color: var(--magenta); }
 @media (prefers-reduced-motion: no-preference) {
   .slot { animation: rise 0.35s ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+}
+
+/* ---- print: the route, and only the route ----
+   People still print conference agendas. Inputs, tabs, buttons and the papers/
+   people views make no sense on paper; the picks with their times and rooms do. */
+@media print {
+  body { background: #fff; font-size: 10.5pt; }
+  .masthead h1 { font-size: 2rem; color: #000; }
+  .sheet-label, .privacy-note, #profile-panel, footer,
+  .view-tabs, .route-actions, #view-papers, #view-people, #view-lookup,
+  .pick-controls, .hidden-note, details.alts, details.contents,
+  .match-bar, #restored-note { display: none !important; }
+  #view-route[hidden], #results[hidden] { display: block !important; }
+  .route::before, .slot::before { display: none; }
+  .route { padding-left: 0; }
+  .pick, .lookup-hit { border: 1px solid #bbb; break-inside: avoid; }
+  .slot { padding: 0.35rem 0; }
+  .day-heading { page-break-after: avoid; }
+  a { color: inherit; text-decoration: none; }
 }

@@ -6,12 +6,19 @@
  * (session score = 0.75 * best facet + 0.25 * mean of top 3, facets kept as
  * evidence). Parallel-session clashes are surfaced with alternatives, never
  * auto-resolved (household_flex Conflict pattern).
+ *
+ * Everything the user builds survives a reload: the profile, the computed
+ * route, their pins and dismissals, and the embeddings of text they've
+ * already embedded all live in localStorage. A service worker caches the
+ * app shell and data, so on conference wifi the page opens to yesterday's
+ * route without touching the network.
  */
 
 import { parseWorks } from "./scholar.js";
 
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6";
 const EMBED_MODEL = "Xenova/bge-small-en-v1.5";
+const EXORDO_BASE = "https://event.ac2026.exordo.com";
 /* A genuine clash is one of your closest calls — a rank, not a distance.
  *
  * This was `runner-up within 0.03 of the pick`, an absolute gap over bge scores,
@@ -26,13 +33,57 @@ const CLASH_PCTL = 0.2;
 const CLASH_MIN_SLOTS = 4;
 const WEAK_REL = 0.55;           // below this normalized score, a slot is "no strong match"
 const FRAGLET_KEY = "traverse.rgs2026.fraglet";
+const ROUTE_KEY = "traverse.rgs2026.route.v1";
+
+// RGS-IBG research group codes (session-code prefixes) to official names.
+// POPGRGE is PopGRG's evening social, not a separate group.
+const GROUP_NAMES = {
+  AGWG: "Animal Geography Working Group",
+  CCRG: "Climate Change Research Group",
+  CGWG: "Carceral Geography Working Group",
+  CMRG: "Coastal and Marine Research Group",
+  DEVGRG: "Development Geographies Research Group",
+  DGRG: "Digital Geographies Research Group",
+  EGRG: "Economic Geography Research Group",
+  ENGRG: "Energy Geographies Research Group",
+  FGRG: "Food Geographies Research Group",
+  GCYFRG: "Geographies of Children, Youth and Families Research Group",
+  GEOGED: "Geography and Education Research Group",
+  GFGRG: "Gender and Feminist Geographies Research Group",
+  GHWRG: "Geographies of Health and Wellbeing Research Group",
+  GISCRG: "Geographical Information Science Research Group",
+  GLTRG: "Geographies of Leisure and Tourism Research Group",
+  HGRG: "Historical Geography Research Group",
+  HPGRG: "History and Philosophy of Geography Research Group",
+  LAGRG: "Latin American Geographies Research Group",
+  LGWG: "Landscape Geography Working Group",
+  MENA: "Geographies of the Middle East and North Africa Research Group",
+  POLGRG: "Political Geography Research Group",
+  POPGRG: "Population Geography Research Group",
+  POPGRGE: "Population Geography Research Group",
+  PYGYRG: "Participatory Geographies Research Group",
+  QMRG: "Quantitative Methods Research Group",
+  RACE: "Race, Culture and Equality Working Group",
+  RADGEO: "Radical Geography Research Group",
+  RGRG: "Rural Geography Research Group",
+  SCGRG: "Social and Cultural Geography Research Group",
+  SSQRG: "Space, Sexualities and Queer Research Group",
+  TGRG: "Transport Geography Research Group",
+  UGRG: "Urban Geography Research Group",
+};
 
 const $ = (sel) => document.querySelector(sel);
 const statusEl = $("#status");
 
-let DATA = null;          // { sessions, facets, matrix (Float32Array), dim, meta }
+let DATA = null;          // { sessions, facets, matrix (Float32Array), dim, meta, byId }
 let dataPromise = null;
 let embedderPromise = null;  // resolves to async (texts, kind) => Float32Array[]
+
+/* Everything the rendered views need, kept so pins/dismissals re-rank without
+ * re-embedding and the whole thing can be revived from localStorage. `results`
+ * and `papers` hold live session refs; `people` holds session ids (one shape
+ * for fresh and restored renders). */
+let STATE = null;         // { results, papers, people, weights, filters, choices, dismissed, chartedAt }
 
 // ---------- data loading ----------
 
@@ -66,8 +117,17 @@ async function fetchData() {
     fetch("data/embeddings.bin").then((r) => r.arrayBuffer()),
   ]);
   const matrix = f16ToF32(new Uint16Array(binBuf));
-  DATA = { sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta };
+  const byId = new Map(sessionsDoc.sessions.map((s) => [s.id, s]));
+  DATA = { sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta, byId };
+  const n = $("#n-sessions");
+  if (n) n.textContent = DATA.sessions.length;
   return DATA;
+}
+
+// Route and embedding caches are only valid against the data they were built
+// from; a data refresh silently invalidates both.
+function dataSig() {
+  return `${DATA.meta.n_facets}|${DATA.sessions.length}`;
 }
 
 function loadEmbedder() {
@@ -77,24 +137,80 @@ function loadEmbedder() {
   return embedderPromise;
 }
 
+// Which backend actually built the vectors. fp16-on-GPU and q8-on-wasm agree
+// to ~2 decimal places, not exactly, so cached vectors must never cross over.
+let EMB_DEVICE = "wasm-q8";
+
 async function buildEmbedder() {
   setStatus("loading language model (~30 MB, first visit only)…");
   const { pipeline } = await import(TRANSFORMERS_CDN);
-  const fe = await pipeline("feature-extraction", EMBED_MODEL, {
-    dtype: "q8",
-    progress_callback: (p) => {
-      if (p.status === "progress" && p.file?.endsWith(".onnx")) {
-        setStatus(`loading language model… ${Math.round(p.progress || 0)}%`);
-      }
-    },
-  });
+  const progress_callback = (p) => {
+    if (p.status === "progress" && p.file?.endsWith(".onnx")) {
+      setStatus(`loading language model… ${Math.round(p.progress || 0)}%`);
+    }
+  };
+  let fe = null;
+  // WebGPU embeds the same profile in ~1s instead of ~10s where the browser
+  // supports it. Failures here are common (no adapter, driver quirks) and
+  // fine — the wasm path below is the one that always works.
+  if (navigator.gpu) {
+    try {
+      fe = await pipeline("feature-extraction", EMBED_MODEL, {
+        device: "webgpu", dtype: "fp16", progress_callback,
+      });
+      EMB_DEVICE = "webgpu-fp16";
+    } catch { fe = null; }
+  }
+  if (!fe) {
+    fe = await pipeline("feature-extraction", EMBED_MODEL, { dtype: "q8", progress_callback });
+    EMB_DEVICE = "wasm-q8";
+  }
   return async (texts, kind) => {
     const prefix = kind === "query" ? DATA.meta.query_prefix : "";
     const out = await fe(texts.map((t) => prefix + t), { pooling: "mean", normalize: true });
     const [n, d] = out.dims;
     const flat = out.data;
-    return Array.from({ length: n }, (_, i) => flat.slice(i * d, (i + 1) * d));
+    return Array.from({ length: n }, (_, i) => new Float32Array(flat.slice(i * d, (i + 1) * d)));
   };
+}
+
+// ---------- embedding cache ----------
+
+/* Embeddings are deterministic, so a title only ever needs embedding once per
+ * model+device. Keyed by the raw text (titles are short; collisions impossible),
+ * vectors stored as base64 float32 (~2 KB each). This is what makes editing the
+ * goals box cheap: a re-plan re-embeds one sentence, not 67 titles. */
+const EMB_CACHE_MAX = 400;
+
+function embCacheKey() { return `traverse.embcache.${EMBED_MODEL}.${EMB_DEVICE}.${dataSig()}`; }
+
+function b64FromVec(v) {
+  const u8 = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+function vecFromB64(b) {
+  const s = atob(b);
+  const u8 = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+  return new Float32Array(u8.buffer);
+}
+
+function loadEmbCache() {
+  try { return JSON.parse(localStorage.getItem(embCacheKey())) || {}; } catch { return {}; }
+}
+
+function saveEmbCache(cache) {
+  const keys = Object.keys(cache);
+  if (keys.length > EMB_CACHE_MAX) {
+    keys.sort((a, b) => cache[a].t - cache[b].t)
+      .slice(0, keys.length - EMB_CACHE_MAX)
+      .forEach((k) => delete cache[k]);
+  }
+  try { localStorage.setItem(embCacheKey(), JSON.stringify(cache)); }
+  catch { try { localStorage.removeItem(embCacheKey()); } catch { /* full is full */ } }
 }
 
 // ---------- profile ----------
@@ -153,20 +269,34 @@ function sourceWeights(worksChunks, goalsChunks, goalsRaw) {
   return { works: 1 - goals, goals };
 }
 
-/* Embed in batches so the status line can tick.
+/* Embed in batches so the status line can tick, checking the vector cache first.
  *
  * Embedding is ~95% of the wall clock and a single fe() call over 67 titles is
  * opaque — the user watches a frozen page for ten seconds and assumes it hung.
- * The yield after each batch is load-bearing: ONNX runs sync on the main thread,
- * so without it the status text never repaints and this buys nothing. */
+ * The yield after each batch is load-bearing: ONNX runs sync on the main thread
+ * (wasm path), so without it the status text never repaints and this buys nothing. */
 async function embedBatched(embed, texts, onBatch) {
-  const vecs = [];
-  for (let i = 0; i < texts.length; i += EMBED_BATCH) {
-    const batch = texts.slice(i, i + EMBED_BATCH);
-    vecs.push(...await embed(batch, "query"));
-    onBatch(vecs.length);
+  const cache = loadEmbCache();
+  const vecs = new Array(texts.length);
+  const missing = [];
+  texts.forEach((t, i) => {
+    if (cache[t]) vecs[i] = vecFromB64(cache[t].v);
+    else missing.push(i);
+  });
+  let done = texts.length - missing.length;
+  if (done) onBatch(done);
+  for (let i = 0; i < missing.length; i += EMBED_BATCH) {
+    const idxs = missing.slice(i, i + EMBED_BATCH);
+    const out = await embed(idxs.map((j) => texts[j]), "query");
+    out.forEach((v, k) => {
+      vecs[idxs[k]] = v;
+      cache[texts[idxs[k]]] = { v: b64FromVec(v), t: Date.now() };
+    });
+    done += idxs.length;
+    onBatch(done);
     await new Promise((r) => setTimeout(r, 0));
   }
+  if (missing.length) saveEmbCache(cache);
   return vecs;
 }
 
@@ -329,6 +459,69 @@ function topPapers(facets, facetScore, sessions, allowed, sources) {
   return out;
 }
 
+/* Who is doing the work nearest yours — as near as the public data allows.
+ *
+ * Ex Ordo publishes no author names, only presenting affiliations, so "people"
+ * here means institutions and research groups, and the copy says so. Institutions
+ * are ranked by how many of their papers land in the top decile of the paper-facet
+ * distribution (a percentile, not an absolute cosine — same rule as everywhere),
+ * tiebroken by their best paper. Groups are ranked like sessions are: mean of the
+ * top 3 session scores, so a group with three good sessions beats one great
+ * outlier plus filler. Session references are ids, not objects, so this survives
+ * a localStorage round-trip unchanged. */
+const TOP_INSTITUTIONS = 12;
+const TOP_GROUPS = 8;
+
+function buildPeople(results, facets, facetScore, sessions, allowed) {
+  const paperF = [];
+  for (let f = 0; f < facets.length; f++) {
+    if (facets[f].kind === "paper" && allowed.has(facets[f].s)) {
+      paperF.push({ label: facets[f].label, si: facets[f].s, score: facetScore[f] });
+    }
+  }
+  paperF.sort((a, b) => b.score - a.score);
+  const strong = percentile(paperF.map((p) => p.score), 0.9);
+
+  const inst = new Map();
+  const seenPaper = new Set();
+  for (const pf of paperF) {
+    const key = pf.label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (seenPaper.has(key)) continue;
+    seenPaper.add(key);
+    const paper = sessions[pf.si].papers.find((p) => p.title === pf.label);
+    for (const aff of paper?.affiliations || []) {
+      let rec = inst.get(aff);
+      if (!rec) inst.set(aff, rec = { name: aff, strong: 0, best: pf.score, papers: [] });
+      if (pf.score >= strong) rec.strong++;
+      if (rec.papers.length < 3) rec.papers.push({ label: pf.label, id: sessions[pf.si].id });
+    }
+  }
+  const institutions = [...inst.values()]
+    .filter((r) => r.strong > 0)
+    .sort((a, b) => b.strong - a.strong || b.best - a.best)
+    .slice(0, TOP_INSTITUTIONS)
+    .map(({ name, strong, papers }) => ({ name, strong, papers }));
+
+  const groups = new Map();
+  for (const r of results) {
+    const code = r.session.group;
+    if (!code || !GROUP_NAMES[code] || isAdminSession(r.session)) continue;
+    const name = GROUP_NAMES[code];
+    let rec = groups.get(name);
+    if (!rec) groups.set(name, rec = { name, code, count: 0, top: [], ids: [] });
+    rec.count++;
+    if (rec.top.length < 3) rec.top.push(r.score);
+    if (rec.ids.length < 2) rec.ids.push(r.session.id);
+  }
+  const ranked = [...groups.values()]
+    .map((g) => ({ ...g, score: g.top.reduce((a, b) => a + b, 0) / g.top.length }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, TOP_GROUPS)
+    .map(({ name, code, count, ids }) => ({ name, code, count, ids }));
+
+  return { institutions, groups: ranked };
+}
+
 // Best similarity + winning chunk per facet, for one source pool.
 function bestPerFacet(vecs) {
   const { facets, matrix, dim } = DATA;
@@ -439,9 +632,13 @@ function scoreSessions(profile, filters) {
   }
 
   results.sort((a, b) => b.score - a.score);
-  // Papers respect the day/mode filters for the same reason the route does: there is
-  // no point being shown the perfect paper on a day you aren't here.
-  return { results, papers: topPapers(facets, facetScore, sessions, allowed, [W, G]) };
+  // Papers and people respect the day/mode filters for the same reason the route
+  // does: there is no point being shown the perfect paper on a day you aren't here.
+  return {
+    results,
+    papers: topPapers(facets, facetScore, sessions, allowed, [W, G]),
+    people: buildPeople(results, facets, facetScore, sessions, allowed),
+  };
 }
 
 function modeAllowed(mode, filter) {
@@ -461,14 +658,18 @@ function isAdminSession(s) {
   return s.papers.length === 0 && (s.description.length < 200 || ADMIN_TITLE.test(s.title));
 }
 
-function buildAgenda(results) {
+const slotKey = (s) => `${s.day}|${s.start}`;
+
+function buildAgenda(results, prefs) {
+  const choices = prefs?.choices || new Map();
+  const dismissed = prefs?.dismissed || new Set();
   const min = Math.min(...results.map((r) => r.score));
   const max = Math.max(...results.map((r) => r.score));
   const norm = (s) => (max > min ? (s - min) / (max - min) : 0.5);
 
   const slots = new Map(); // "day|start" -> [result]
   for (const r of results) {
-    const key = `${r.session.day}|${r.session.start}`;
+    const key = slotKey(r.session);
     if (!slots.has(key)) slots.set(key, []);
     slots.get(key).push(r);
   }
@@ -476,32 +677,41 @@ function buildAgenda(results) {
   const prepared = [...slots.entries()].sort().map(([key, list]) => {
     const [day] = key.split("|");
     list.sort((a, b) => b.score - a.score);
-    const substantive = list.filter((r) => !isAdminSession(r.session));
-    const ranked = substantive.length ? substantive : list;
-    const weak = norm(ranked[0].score) < WEAK_REL || !substantive.length;
+    const live = list.filter((r) => !dismissed.has(r.session.id));
+    const substantive = live.filter((r) => !isAdminSession(r.session));
+    const ranked = substantive.length ? substantive : (live.length ? live : list);
+    // A pin is the user overruling the ranking; it also overrules "weak".
+    const pinnedId = choices.get(key);
+    const pinned = pinnedId != null ? list.find((r) => r.session.id === pinnedId) : null;
+    const weak = !pinned && (norm(ranked[0].score) < WEAK_REL || !substantive.length);
     // Infinity, not 0, for a one-session slot: no runner-up means no contest, and it
     // must not count as the closest call of the day.
     const gap = ranked.length > 1 ? ranked[0].score - ranked[1].score : Infinity;
-    return { day, list, ranked, weak, gap };
+    return { key, day, list, ranked, pinned, weak, gap, hidden: list.length - live.length };
   });
 
   // Second pass: "closest" only means something once every gap is known. Measure
-  // over the real decisions — weak slots aren't ones you're choosing in.
-  const gaps = prepared.filter((p) => !p.weak && p.gap < Infinity).map((p) => p.gap);
+  // over the real decisions — weak slots aren't ones you're choosing in, and a
+  // pinned slot has already been decided.
+  const gaps = prepared.filter((p) => !p.weak && !p.pinned && p.gap < Infinity).map((p) => p.gap);
   const clashMax = gaps.length >= CLASH_MIN_SLOTS ? percentile(gaps, CLASH_PCTL) : -Infinity;
 
   const days = new Map();
   for (const p of prepared) {
-    const clash = !p.weak && p.gap <= clashMax;
-    const top = p.ranked[0];
+    const clash = !p.pinned && !p.weak && p.gap <= clashMax;
+    const top = p.pinned || p.ranked[0];
+    const rest = p.ranked.filter((r) => r !== top);
     const slot = {
+      key: p.key,
       start: top.session.start,
       end: top.session.end,
       parallel: p.list.length,
       pick: top,
-      clashWith: clash ? p.ranked[1] : null,
-      alternatives: p.ranked.slice(clash ? 2 : 1, clash ? 5 : 4),
+      pinned: !!p.pinned,
+      clashWith: clash ? rest[0] : null,
+      alternatives: rest.slice(clash ? 1 : 0, clash ? 4 : 3),
       weak: p.weak,
+      hidden: p.hidden,
       relStrength: norm(top.score),
     };
     if (!days.has(p.day)) days.set(p.day, []);
@@ -510,11 +720,65 @@ function buildAgenda(results) {
   return { days, norm };
 }
 
+// ---------- route persistence ----------
+
+/* The route survives a reload so that on a conference morning the page opens
+ * to yesterday's plan straight from localStorage — no model download, no
+ * re-embed, no network. Only ids and display strings are stored; sessions are
+ * re-joined to the freshly loaded programme, and a changed dataSig discards
+ * the lot rather than showing a route built from data that no longer exists. */
+const slimCredit = ({ label, chunk, sole }) => ({ label, chunk, sole });
+
+function saveRoute() {
+  if (!STATE) return;
+  const slim = {
+    dataSig: dataSig(),
+    chartedAt: STATE.chartedAt,
+    filters: { days: [...STATE.filters.days], mode: STATE.filters.mode },
+    weights: STATE.weights,
+    choices: Object.fromEntries(STATE.choices),
+    dismissed: [...STATE.dismissed],
+    results: STATE.results.map((r) => ({
+      id: r.session.id, score: r.score, dual: r.dual,
+      evidence: r.evidence.map((e) => ({ kind: e.kind, label: e.label, from: e.from.map(slimCredit) })),
+    })),
+    papers: STATE.papers.map((p) => ({ label: p.label, id: p.session.id, from: p.from.map(slimCredit) })),
+    people: STATE.people,
+  };
+  try { localStorage.setItem(ROUTE_KEY, JSON.stringify(slim)); } catch { /* fraglet still saves */ }
+}
+
+function restoreRoute() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(ROUTE_KEY) || "null"); } catch { return false; }
+  if (!saved || saved.dataSig !== dataSig() || !saved.results?.length) return false;
+  const results = saved.results
+    .map((r) => (DATA.byId.has(r.id) ? { ...r, session: DATA.byId.get(r.id) } : null))
+    .filter(Boolean);
+  if (!results.length) return false;
+  STATE = {
+    results,
+    papers: (saved.papers || [])
+      .map((p) => (DATA.byId.has(p.id) ? { ...p, session: DATA.byId.get(p.id) } : null))
+      .filter(Boolean),
+    people: saved.people || { institutions: [], groups: [] },
+    weights: saved.weights,
+    filters: { days: new Set(saved.filters.days), mode: saved.filters.mode },
+    choices: new Map(Object.entries(saved.choices || {}).map(([k, v]) => [k, Number(v)])),
+    dismissed: new Set(saved.dismissed || []),
+    chartedAt: saved.chartedAt,
+  };
+  renderAll({ restored: true });
+  return true;
+}
+
 // ---------- rendering ----------
 
 const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 const fmtDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/London" });
+const fmtStamp = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 const t = (iso) => fmtTime.format(new Date(iso));
+const dayName = (d) => fmtDay.format(new Date(d + "T12:00:00Z"));
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function evidenceHtml(ev) {
@@ -537,6 +801,15 @@ function evidenceHtml(ev) {
 
 function trunc(s, n) { return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s; }
 
+// Ex Ordo's public session pages route on the schedule_event id (`eid`), which
+// data before the July 2026 refresh doesn't carry — hence the guard.
+function exordoUrl(s) {
+  if (!s.eid) return null;
+  const slug = s.title.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `${EXORDO_BASE}/session/${s.eid}/${slug}`;
+}
+
 /* Ex Ordo names 456 of the 623 rooms "In-person 10" and the like, so printing the
  * room and then the mode gives you "In-person 10 · in person" on most of the
  * programme. If the room name already says it, don't say it again. */
@@ -550,40 +823,76 @@ function metaBits(s) {
   return [s.code, venue, venueSaysMode ? "" : modeLabel, papers].filter(Boolean);
 }
 
-function pickHtml(r, norm, { clash = false } = {}) {
+// The clash card says "read both and pick" — that needs the contents on hand,
+// not just a title. Kept collapsed so the route stays scannable.
+function contentsHtml(s) {
+  const desc = s.description ? `<p class="sess-desc">${esc(trunc(s.description, 700))}</p>` : "";
+  const papers = s.papers.length
+    ? `<ol class="sess-papers">${s.papers.map((p) =>
+        `<li>${esc(p.title)}${p.affiliations?.length ? ` <span class="aff mono">${esc(p.affiliations.join(" · "))}</span>` : ""}</li>`).join("")}</ol>`
+    : "";
+  const url = exordoUrl(s);
+  const link = url ? `<p class="sess-link"><a href="${url}" rel="noopener" target="_blank">Open in the official programme</a></p>` : "";
+  if (!desc && !papers) return "";
+  return `<details class="contents"><summary>What's in this session</summary>${desc}${papers}${link}</details>`;
+}
+
+function controlsHtml(r, slot, role) {
+  const id = r.session.id;
+  if (role === "alt") {
+    return `<button type="button" class="mini" data-act="pin" data-id="${id}" data-slot="${esc(slot.key)}">Make this my pick</button>`;
+  }
+  if (role === "clash") {
+    return `<button type="button" class="mini" data-act="pin" data-id="${id}" data-slot="${esc(slot.key)}">Go with this one</button>`;
+  }
+  if (slot.pinned) {
+    return `<span class="pin-chip mono">your pick</span>
+      <button type="button" class="mini" data-act="unpin" data-id="${id}" data-slot="${esc(slot.key)}">Unpin</button>`;
+  }
+  return `<button type="button" class="mini" data-act="dismiss" data-id="${id}" data-slot="${esc(slot.key)}">Not this one</button>`;
+}
+
+function pickHtml(r, norm, { clash = false, slot = null, role = "pick" } = {}) {
   const s = r.session;
+  const controls = slot ? `<div class="pick-controls">${controlsHtml(r, slot, role)}</div>` : "";
   return `<article class="pick${clash ? " clash-a" : ""}">
-    ${r.dual ? `<span class="dual-flag">Your work and your aims both point here</span>` : ""}
+    ${r.dual ? `<span class="dual-flag">matches your work and your aims</span>` : ""}
     <h4>${esc(s.title)}</h4>
     <span class="meta mono">${metaBits(s).map(esc).join(" · ")}</span>
     <div class="match-bar" role="img" aria-label="match strength ${Math.round(norm(r.score) * 100)} of 100"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
     ${evidenceHtml(r.evidence)}
+    ${contentsHtml(s)}
+    ${controls}
   </article>`;
 }
 
 function slotHtml(slot, norm) {
   const time = `<div class="slot-time mono">${t(slot.start)}–${t(slot.end)} · ${slot.parallel} parallel option${slot.parallel === 1 ? "" : "s"}</div>`;
+  const restore = slot.hidden
+    ? `<div class="hidden-note">${slot.hidden} hidden
+        <button type="button" class="mini" data-act="restore" data-slot="${esc(slot.key)}">restore</button></div>`
+    : "";
   if (slot.weak) {
-    return `<div class="slot"><div class="weak-slot">${time}
-      No strong match here — closest is <span class="pick-inline">${esc(slot.pick.session.title)}</span>
-      (${esc(slot.pick.session.venue || "venue tbc")}). A good slot for coffee and corridors.</div></div>`;
+    return `<div class="slot" data-start="${slot.start}" data-end="${slot.end}"><div class="weak-slot">${time}
+      Nothing here matches you well — nearest is <span class="pick-inline">${esc(slot.pick.session.title)}</span>
+      (${esc(slot.pick.session.venue || "venue tbc")}). Take the break.</div>${restore}</div>`;
   }
   let body;
   if (slot.clashWith) {
-    body = `<span class="clash-flag">Genuine clash</span>
-      <p class="clash-note">Two sessions match you almost equally here — your call, not ours:</p>
+    body = `<span class="clash-flag">Close call</span>
+      <p class="clash-note">These two are effectively tied for you. Read both, pick one:</p>
       <div class="fork">
-        ${pickHtml(slot.pick, norm, { clash: true })}
-        ${pickHtml(slot.clashWith, norm, { clash: true })}
+        ${pickHtml(slot.pick, norm, { clash: true, slot, role: "clash" })}
+        ${pickHtml(slot.clashWith, norm, { clash: true, slot, role: "clash" })}
       </div>`;
   } else {
-    body = pickHtml(slot.pick, norm);
+    body = pickHtml(slot.pick, norm, { slot });
   }
   const alts = slot.alternatives.length
-    ? `<details class="alts"><summary>Also worth a look in this slot (${slot.alternatives.length})</summary>
-        ${slot.alternatives.map((a) => pickHtml(a, norm)).join("")}</details>`
+    ? `<details class="alts"><summary>Also in this slot (${slot.alternatives.length})</summary>
+        ${slot.alternatives.map((a) => pickHtml(a, norm, { slot, role: "alt" })).join("")}</details>`
     : "";
-  return `<div class="slot">${time}${body}${alts}</div>`;
+  return `<div class="slot" data-start="${slot.start}" data-end="${slot.end}">${time}${body}${alts}${restore}</div>`;
 }
 
 /* Which sessions the route is actually sending you to — picks and both halves of a
@@ -601,7 +910,7 @@ function routedSessionIds(days) {
 }
 
 function papersHtml(papers, routed) {
-  if (!papers.length) return "";
+  if (!papers.length) return "<p class='hint'>No papers to show yet.</p>";
   const rows = papers.map((p) => {
     const inRoute = routed.has(p.session.id);
     const quote = p.from.length ? `<div class="paper-why">Matches ${creditHtml(p.from[0])}</div>` : "";
@@ -610,37 +919,219 @@ function papersHtml(papers, routed) {
       : `<span class="paper-flag catch">worth catching</span>`;
     return `<li>
       <div class="paper-title">${esc(p.label)}</div>
-      <div class="paper-where mono">${fmtDay.format(new Date(p.session.start)).split(",")[0]} ${t(p.session.start)} ·
+      <div class="paper-where mono">${dayName(p.session.day).split(",")[0]} ${t(p.session.start)} ·
         ${esc(p.session.title)}${p.session.venue ? ` · ${esc(p.session.venue)}` : ""}</div>
       ${quote}${flag}
     </li>`;
   }).join("");
   return `<div class="papers-card">
     <h3>The ${papers.length} papers closest to you</h3>
-    <p class="hint">Ranked paper by paper rather than session by session. An agenda has to be
-    chosen a slot at a time, so a single paper that lands squarely on your work can be outvoted
-    by the session around it — these are the papers themselves.</p>
+    <p class="hint">The route above picks whole sessions, so a paper that matches you well can
+    sit inside a session that didn't make the cut. These are the papers themselves, wherever
+    they landed.</p>
     <ol class="paper-list">${rows}</ol>
   </div>`;
 }
 
-function render(results, agenda, papers) {
-  const { days, norm } = agenda;
-  const top5 = results.filter((r) => !isAdminSession(r.session)).slice(0, 5);
+function sessionLine(id) {
+  const s = DATA.byId.get(id);
+  if (!s) return "";
+  return `<div class="mini-session">
+    <span class="mini-title">${esc(s.title)}</span>
+    <span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(s.venue)}` : ""}</span>
+  </div>`;
+}
+
+function peopleHtml(people) {
+  const inst = people.institutions.length
+    ? `<div class="people-card">
+        <h3>Institutions doing work near yours</h3>
+        <p class="hint">The programme doesn't publish author names, only presenting
+        affiliations — so this is as close to "people" as the public data gets. Ranked by how
+        many of their papers land in the top tenth of your matches.</p>
+        <ol class="inst-list">${people.institutions.map((r) => `
+          <li>
+            <div class="inst-head"><strong>${esc(r.name)}</strong>
+              <span class="mono">${r.strong} close paper${r.strong === 1 ? "" : "s"}</span></div>
+            <ul class="inst-papers">${r.papers.map((p) => {
+              const s = DATA.byId.get(p.id);
+              return `<li>${esc(p.label)}${s ? ` <span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}</span>` : ""}</li>`;
+            }).join("")}</ul>
+          </li>`).join("")}</ol>
+      </div>`
+    : "";
+  const groups = people.groups.length
+    ? `<div class="people-card">
+        <h3>Research groups convening your kind of sessions</h3>
+        <p class="hint">RGS-IBG research groups sponsoring the sessions that score highest for
+        you. Their sessions and socials are where you'll keep bumping into the same people —
+        which is rather the point.</p>
+        <ol class="group-list">${people.groups.map((g) => `
+          <li>
+            <div class="inst-head"><strong>${esc(g.name)}</strong>
+              <span class="mono">${g.code} · ${g.count} session${g.count === 1 ? "" : "s"}</span></div>
+            ${g.ids.map(sessionLine).join("")}
+          </li>`).join("")}</ol>
+      </div>`
+    : "";
+  return (inst + groups) || "<p class='hint'>Nothing to show yet — chart a route first.</p>";
+}
+
+// ---------- lookup ----------
+
+function lookupHtml(q) {
+  const ql = q.trim().toLowerCase();
+  if (ql.length < 2) return "";
+  const rankOf = new Map(STATE.results.map((r, i) => [r.session.id, i + 1]));
+  const norm = STATE.agenda.norm;
+  const hits = DATA.sessions
+    .filter((s) => s.title.toLowerCase().includes(ql) || s.code.toLowerCase().includes(ql))
+    .slice(0, 20);
+  if (!hits.length) return `<p class="hint">No session title or code contains “${esc(q)}”.</p>`;
+  const total = STATE.results.length;
+  return hits.map((s) => {
+    const rank = rankOf.get(s.id);
+    const r = rank ? STATE.results[rank - 1] : null;
+    const where = `<span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(s.venue)}` : ""}</span>`;
+    if (!r) {
+      return `<div class="lookup-hit"><h4>${esc(s.title)}</h4>${where}
+        <p class="hint">Outside your current day or attendance filters, so it wasn't ranked.</p></div>`;
+    }
+    const note = isAdminSession(s) ? `<p class="hint">Social/admin session — never recommended, whatever it scores.</p>` : "";
+    return `<div class="lookup-hit">
+      <h4>${esc(s.title)}</h4>${where}
+      <div class="lookup-rank">Ranked <strong>#${rank}</strong> of ${total} for you</div>
+      <div class="match-bar"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
+      ${evidenceHtml(r.evidence)}${note}
+    </div>`;
+  }).join("");
+}
+
+// ---------- ICS export ----------
+
+function icsEscape(s) {
+  return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+}
+const icsDate = (iso) => iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+// RFC 5545 wants lines ≤ 75 octets, folded with CRLF + space. Some parsers
+// (Google) genuinely reject unfolded long lines, so this isn't optional.
+function icsFold(line) {
+  const out = [];
+  while (line.length > 74) { out.push(line.slice(0, 74)); line = " " + line.slice(74); }
+  out.push(line);
+  return out;
+}
+
+function evidenceText(r) {
+  return r.evidence.map((e) => {
+    const what = e.kind === "paper" ? `paper "${e.label}"` : "the session theme";
+    const from = e.from.map((f) => (f.sole ? f.label : `${f.label} "${trunc(f.chunk, 60)}"`)).join(" and ");
+    return `Matches ${what}${from ? ` — from ${from}` : ""}`;
+  }).join("\n");
+}
+
+function buildIcs(days) {
+  const stamp = icsDate(new Date().toISOString());
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Traverse//RGS-IBG 2026//EN",
+    "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+  for (const slots of days.values()) {
+    for (const slot of slots) {
+      if (slot.weak) continue;
+      // An unresolved clash exports as two overlapping events — that's what an
+      // unresolved clash is. Pinning one first removes the other.
+      const picks = slot.clashWith ? [slot.pick, slot.clashWith] : [slot.pick];
+      for (const r of picks) {
+        const s = r.session;
+        const url = exordoUrl(s);
+        const desc = [evidenceText(r), s.code ? `Session ${s.code}` : "", url || ""]
+          .filter(Boolean).join("\n");
+        lines.push("BEGIN:VEVENT",
+          `UID:traverse-${s.id}@rgs2026`,
+          `DTSTAMP:${stamp}`,
+          `DTSTART:${icsDate(s.start)}`,
+          `DTEND:${icsDate(s.end)}`,
+          `SUMMARY:${icsEscape(s.title)}`,
+          `LOCATION:${icsEscape(s.venue || "venue tbc")}`,
+          `DESCRIPTION:${icsEscape(desc)}`,
+          "END:VEVENT");
+      }
+    }
+  }
+  lines.push("END:VCALENDAR");
+  return lines.flatMap(icsFold).join("\r\n") + "\r\n";
+}
+
+function downloadIcs() {
+  if (!STATE?.agenda) return;
+  const blob = new Blob([buildIcs(STATE.agenda.days)], { type: "text/calendar" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rgs2026-route.ics";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---------- now / next ----------
+
+// Only meaningful during the conference itself; the rest of the year the route
+// renders without time chips and without stealing the scroll.
+function conferenceWindow() {
+  const days = DATA.sessions.map((s) => s.day);
+  return { first: days.reduce((a, b) => (a < b ? a : b)), last: days.reduce((a, b) => (a > b ? a : b)) };
+}
+
+function markNowNext() {
+  const { first, last } = conferenceWindow();
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  if (today < first || today > last) return null;
+  const now = Date.now();
+  let target = null;
+  for (const el of document.querySelectorAll("#route .slot")) {
+    const start = Date.parse(el.dataset.start), end = Date.parse(el.dataset.end);
+    const chip = (cls, text) => {
+      const span = document.createElement("span");
+      span.className = cls;
+      span.textContent = text;
+      el.prepend(span);
+    };
+    if (start <= now && now < end) {
+      el.classList.add("slot-now");
+      chip("now-chip", "happening now");
+      target = target || el;
+    } else if (!target && start > now && el.dataset.start.startsWith(today)) {
+      el.classList.add("slot-next");
+      chip("now-chip next", "up next");
+      target = el;
+    }
+  }
+  return target;
+}
+
+// ---------- render ----------
+
+function renderOverview() {
+  const top5 = STATE.results.filter((r) => !isAdminSession(r.session)).slice(0, 5);
+  const nudge = STATE.weights.goals === 0
+    ? `<p class="goals-nudge">This route only looks at your past work. A sentence or two in the
+       second box about what you're doing <em>now</em> will usually change it.</p>`
+    : "";
   $("#overview").innerHTML = `<div class="overview-card">
     <h3>If you only make five sessions</h3>
-    ${top5.map((r) => `<div>• ${esc(r.session.title)} <span class="mono">(${fmtDay.format(new Date(r.session.start)).split(",")[0]} ${t(r.session.start)})</span></div>`).join("")}
+    ${top5.map((r) => `<div>• ${esc(r.session.title)} <span class="mono">(${dayName(r.session.day).split(",")[0]} ${t(r.session.start)})</span></div>`).join("")}
+    ${nudge}
   </div>`;
+}
 
-  $("#papers").innerHTML = papersHtml(papers, routedSessionIds(days));
+function renderRoute() {
+  const agenda = buildAgenda(STATE.results, STATE);
+  STATE.agenda = agenda;
+  const { days, norm } = agenda;
 
-  const tabs = [...days.keys()].map((d) =>
-    `<button type="button" data-day="${d}">${fmtDay.format(new Date(d + "T12:00:00Z"))}</button>`).join("");
-  $("#day-tabs").innerHTML = tabs;
-
+  $("#day-tabs").innerHTML = [...days.keys()].map((d) =>
+    `<button type="button" data-day="${d}" aria-selected="false">${dayName(d)}</button>`).join("");
   $("#route").innerHTML = [...days.entries()].map(([day, slots]) => `
     <section class="day-block" id="day-${day}">
-      <h3 class="day-heading">${fmtDay.format(new Date(day + "T12:00:00Z"))}</h3>
+      <h3 class="day-heading">${dayName(day)}</h3>
       <div class="route">${slots.map((s) => slotHtml(s, norm)).join("")}</div>
     </section>`).join("");
 
@@ -650,10 +1141,68 @@ function render(results, agenda, papers) {
       $("#day-tabs").querySelectorAll("button").forEach((x) => x.setAttribute("aria-selected", x === b));
     });
   });
+  return markNowNext();
+}
+
+function renderAll({ restored = false, scroll = false } = {}) {
+  const nowSlot = renderRoute();
+  renderOverview();
+  $("#papers").innerHTML = papersHtml(STATE.papers, routedSessionIds(STATE.agenda.days));
+  $("#people").innerHTML = peopleHtml(STATE.people);
+  $("#lookup-out").innerHTML = lookupHtml($("#lookup-input").value || "");
+
+  const note = $("#restored-note");
+  if (restored && STATE.chartedAt) {
+    note.textContent = `route from ${fmtStamp.format(new Date(STATE.chartedAt))} — edit your profile and re-chart any time`;
+    note.hidden = false;
+  } else {
+    note.hidden = true;
+  }
 
   $("#results").hidden = false;
-  $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (nowSlot) nowSlot.scrollIntoView({ behavior: "smooth", block: "center" });
+  else if (scroll) $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+// pins, dismissals and restores re-rank instantly from the scores in memory —
+// no re-embedding, so no waiting.
+$("#route").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn || !STATE) return;
+  const { act, id, slot } = btn.dataset;
+  const sid = Number(id);
+  if (act === "pin") { STATE.choices.set(slot, sid); STATE.dismissed.delete(sid); }
+  else if (act === "unpin") STATE.choices.delete(slot);
+  else if (act === "dismiss") {
+    STATE.dismissed.add(sid);
+    if (STATE.choices.get(slot) === sid) STATE.choices.delete(slot);
+  } else if (act === "restore") {
+    for (const r of STATE.results) {
+      if (slotKey(r.session) === slot) STATE.dismissed.delete(r.session.id);
+    }
+  }
+  renderRoute();
+  $("#papers").innerHTML = papersHtml(STATE.papers, routedSessionIds(STATE.agenda.days));
+  saveRoute();
+});
+
+// ---------- tabs ----------
+
+$("#view-tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-view]");
+  if (!btn) return;
+  $("#view-tabs").querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", b === btn));
+  document.querySelectorAll("#results .view").forEach((v) => { v.hidden = v.id !== `view-${btn.dataset.view}`; });
+  if (btn.dataset.view === "lookup") $("#lookup-input").focus();
+});
+
+let lookupTimer = null;
+$("#lookup-input").addEventListener("input", () => {
+  clearTimeout(lookupTimer);
+  lookupTimer = setTimeout(() => {
+    if (STATE?.agenda) $("#lookup-out").innerHTML = lookupHtml($("#lookup-input").value);
+  }, 150);
+});
 
 // ---------- main flow ----------
 
@@ -683,6 +1232,15 @@ function refreshWorksNote() {
     + `<details><summary>Check what was read</summary><ol class="parsed-list">${list}</ol></details>`;
 }
 
+// One message per way this actually fails. "Something went wrong" was covering
+// for offline, a CDN outage and a scoring bug alike, which helps nobody.
+function failureMessage(stage) {
+  if (!navigator.onLine) return "you're offline — the model can't load until you're back on a network.";
+  if (stage === "data") return "couldn't load the programme data — refresh and try again.";
+  if (stage === "model") return "couldn't load the language model (CDN hiccup?) — refresh and try again.";
+  return "something went wrong while matching — refresh and try again. If it repeats, file an issue.";
+}
+
 async function plan() {
   const worksRaw = $("#works").value.trim();
   const goalsRaw = $("#goals").value.trim();
@@ -697,9 +1255,12 @@ async function plan() {
   const btn = $("#plan-btn");
   btn.disabled = true;
   document.body.classList.add("working");
+  let stage = "data";
   try {
     await loadData();
+    stage = "model";
     const embed = await loadEmbedder();
+    stage = "matching";
     const profile = buildProfile(worksRaw, goalsRaw);
     const noun = profile.parsed.kind === "works" ? "papers" : "profile";
     const nWorks = profile.works.chunks.length;
@@ -711,10 +1272,18 @@ async function plan() {
     profile.goals.vecs = await embedBatched(embed, profile.goals.chunks, () => {});
     setStatus("charting the route…");
     await new Promise((r) => setTimeout(r, 30)); // let status paint
-    const { results, papers } = scoreSessions(profile, { days, mode });
+    const { results, papers, people } = scoreSessions(profile, { days, mode });
     if (!results.length) { setStatus("no sessions match those filters."); return; }
-    const agenda = buildAgenda(results);
-    render(results, agenda, papers);
+    STATE = {
+      results, papers, people,
+      weights: profile.weights,
+      filters: { days, mode },
+      choices: new Map(),
+      dismissed: new Set(),
+      chartedAt: new Date().toISOString(),
+    };
+    renderAll({ scroll: true });
+    saveRoute();
     const fraglet = buildFraglet(worksRaw, goalsRaw, [...days], mode);
     localStorage.setItem(FRAGLET_KEY, JSON.stringify(fraglet));
     $("#save-fraglet").hidden = false;
@@ -722,7 +1291,7 @@ async function plan() {
     setStatus("");
   } catch (err) {
     console.error(err);
-    setStatus("something went wrong loading the model — refresh and try again.");
+    setStatus(failureMessage(stage));
   } finally {
     btn.disabled = false;
     document.body.classList.remove("working");
@@ -742,6 +1311,7 @@ function downloadFraglet() {
 
 $("#plan-btn").addEventListener("click", plan);
 $("#save-fraglet").addEventListener("click", downloadFraglet);
+$("#ics-btn").addEventListener("click", downloadIcs);
 
 let noteTimer = null;
 $("#works").addEventListener("input", () => {
@@ -767,8 +1337,15 @@ try {
 
 // warm the data and model caches in the background so "Chart my route" is
 // instant by the time the user has finished typing; errors here are ignored —
-// plan() retries with visible status if anything failed.
+// plan() retries with visible status if anything failed. The route from last
+// time renders as soon as the data is in, before the model even starts.
 loadData()
-  .then(() => { setStatus(""); return loadEmbedder(); })
+  .then(() => { setStatus(""); restoreRoute(); return loadEmbedder(); })
   .then(() => setStatus(""))
   .catch(() => setStatus(""));
+
+// Offline support: cache the shell and data so the route opens on venue wifi
+// (or none). The model is already cached by transformers.js itself.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* http, old browser — fine */ });
+}
