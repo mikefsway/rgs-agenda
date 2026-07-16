@@ -103,9 +103,17 @@ function chunkText(text, maxLen = 420, maxChunks = 16) {
   return chunks.slice(0, maxChunks);
 }
 
-const WORKS_MAX_TITLES = 40;   // 40 short titles cost less to embed than 16 packed chunks
+/* Generous enough that a normal academic's whole profile goes in — the cap is a
+ * backstop against a 500-paper paste, not an editorial choice. Embedding runs at
+ * ~150ms/title and is the only real cost (scoring the lot takes ~300ms), so this
+ * bounds the worst case at ~20s while leaving almost everyone uncapped. Anything
+ * dropped is the oldest, and the preview says so. */
+const WORKS_MAX_TITLES = 120;
 const WORKS_MAX_PROSE = 12;
 const GOALS_MAX_CHUNKS = 6;
+// Small batches so progress ticks visibly, and so one long title doesn't pad the
+// whole run — transformers.js pads each batch to its longest member.
+const EMBED_BATCH = 8;
 const GOALS_MAX_WEIGHT = 0.5;
 const GOALS_FULL_WEIGHT_CHARS = 300;   // ~3 real sentences earns the goals box its full weight
 
@@ -122,6 +130,23 @@ function sourceWeights(worksChunks, goalsChunks, goalsRaw) {
   // Scale with what they actually wrote: one vague line shouldn't carry half the score.
   const goals = GOALS_MAX_WEIGHT * Math.min(goalsRaw.trim().length / GOALS_FULL_WEIGHT_CHARS, 1);
   return { works: 1 - goals, goals };
+}
+
+/* Embed in batches so the status line can tick.
+ *
+ * Embedding is ~95% of the wall clock and a single fe() call over 67 titles is
+ * opaque — the user watches a frozen page for ten seconds and assumes it hung.
+ * The yield after each batch is load-bearing: ONNX runs sync on the main thread,
+ * so without it the status text never repaints and this buys nothing. */
+async function embedBatched(embed, texts, onBatch) {
+  const vecs = [];
+  for (let i = 0; i < texts.length; i += EMBED_BATCH) {
+    const batch = texts.slice(i, i + EMBED_BATCH);
+    vecs.push(...await embed(batch, "query"));
+    onBatch(vecs.length);
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  return vecs;
 }
 
 function buildProfile(worksRaw, goalsRaw) {
@@ -450,14 +475,19 @@ async function plan() {
 
   const btn = $("#plan-btn");
   btn.disabled = true;
+  document.body.classList.add("working");
   try {
     await loadData();
     const embed = await loadEmbedder();
-    setStatus("reading your profile…");
     const profile = buildProfile(worksRaw, goalsRaw);
+    const noun = profile.parsed.kind === "works" ? "papers" : "profile";
+    const nWorks = profile.works.chunks.length;
+    setStatus(`reading your ${noun}…`);
     // Sequential, not Promise.all: one transformers.js pipeline, one call at a time.
-    profile.works.vecs = profile.works.chunks.length ? await embed(profile.works.chunks, "query") : [];
-    profile.goals.vecs = profile.goals.chunks.length ? await embed(profile.goals.chunks, "query") : [];
+    profile.works.vecs = await embedBatched(embed, profile.works.chunks,
+      (n) => setStatus(`reading your ${noun}… ${n} of ${nWorks}`));
+    if (profile.goals.chunks.length) setStatus("reading your aims…");
+    profile.goals.vecs = await embedBatched(embed, profile.goals.chunks, () => {});
     setStatus("charting the route…");
     await new Promise((r) => setTimeout(r, 30)); // let status paint
     const results = scoreSessions(profile, { days, mode });
@@ -474,6 +504,7 @@ async function plan() {
     setStatus("something went wrong loading the model — refresh and try again.");
   } finally {
     btn.disabled = false;
+    document.body.classList.remove("working");
   }
 }
 
