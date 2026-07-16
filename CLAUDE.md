@@ -28,17 +28,85 @@ intent, and the goals box stops doing anything — while still *looking* like it
 works, because the agenda still shifts a little when you edit it. Keep the pools
 separate and blend per-source bests.
 
+Separate pools are necessary and not sufficient, and the failure looks identical
+from the outside. The pools were separate and the goals box still did nothing: a
+linear length ramp gave one real sentence 16% of the weight, so the agenda came
+back wall-to-wall energy justice for someone who had just said they now work on AI
+agents. When the goals box "isn't working", measure its weight and its rank spread
+before touching the pooling — see the three invariants below.
+
 **One title per chunk.** `chunkText`'s 420-char packing assumes prose, where
 adjacent sentences share a topic. A title list is N independent topics; packing
 them embeds the centroid of a dozen unrelated directions and points nowhere. It
 also makes the evidence quote unreadable (it slices mid-title).
 
-**Thresholds over bge scores must be relative, not absolute.** Cosine
-similarities sit in a narrow, corpus-dependent band — nearly every session clears
-0.35 against nearly any profile. `EV_MIN` gets away with being absolute because
-it only gates whether to *cite* a facet. Anything that's meant to be selective
-(like `DUAL_PCTL`) has to be a percentile of the observed distribution, or it
-fires on everything or nothing.
+**Thresholds over bge scores must be relative, not absolute — no exceptions.**
+Cosine similarities sit in a narrow, corpus-dependent band. This file used to
+grant `EV_MIN` an exception, on the grounds that it "only gates whether to *cite*
+a facet". That was wrong: measured on the real fixture, every goals best cleared
+0.35, so it gated nothing, the aims were quoted identically under all 623
+sessions, and the second evidence line filled with whatever ranked next — a real
+example being *"Investigating Decision-Making in Maryland Blue Crab Industry"*.
+`CLASH_EPS = 0.03` was the same mistake and fired in 50–74% of slots, which is a
+tool declining to choose rather than flagging a close call. Both are percentiles
+now. If you are writing a float literal to compare a cosine against, you are
+about to do this again.
+
+**Rank each box before blending them.** The two pools live in different absolute
+bands: on the real fixture the works best (max over 67 titles) averages 0.614 and
+the goals best (max over one sentence) 0.499. That ~0.11 is a pool-size artifact —
+a max over 67 draws beats a max over one — and says nothing about which box
+matches better. Blend raw cosines and the bigger pool gets a free head start on
+every facet, which is also why the works box used to be credited first on
+virtually every evidence line. Their *spreads* are near-identical (sd 0.048 vs
+0.050), and that's the useful half: once both are ranks, a box's share of the
+weight is its share of the ranking, so `sourceWeights` means what it says. It
+follows that the length ramp *is* the blend — a linear one handed one sharp
+sentence 16% and let 67 papers outvote the only statement of intent.
+
+**The blend must be non-compensatory.** "Sessions that match *both*" is the
+promise on the landing page, and a weighted arithmetic mean does not keep it: it
+rewards a high total, so a session the works box barely reaches (p59) can ride a
+strong aims rank (p100) into the agenda. A weighted geometric mean can't be bought
+that way. The same trap, subtler, sank the dual badge: `worksHit >= p97 &&
+goalsHit >= p97` reads like "top 3%", but the two ranks are only loosely
+correlated, so the joint event is nearer 0.1% and it fired on 0 of 623 sessions.
+Threshold the *min* of the two ranks, not each independently.
+
+## Sessions vs papers — the aggregate is lossy on purpose
+
+A session scores `0.75 * best facet + 0.25 * mean(top 3)`, so depth beats a lone
+bullseye: 100 minutes where everything lands is worth more than 100 minutes for
+one paper and two duds. That's the right call for an agenda, and it throws away
+real signal by design — the single closest paper in the programme can sit in a
+session that deserves to lose its slot. On the real fixture the second-best
+matching facet of 3204 (`works p98, aims p99`) was buried five deep in a collapsed
+`<details>`, because its two neighbours were weak.
+
+Don't fix that in the aggregate; it isn't broken, and no reweighting reaches it
+anyway (the winning session led on the best-facet term too). `topPapers` reports
+underneath the aggregate instead, and the "worth catching" flag is exactly the
+case where the paper is close but its session isn't.
+
+## Verifying a scoring change
+
+Proxies lie, so run the real model over the real profile:
+
+```
+python3 -m http.server 8765 --directory docs
+```
+
+Then drive it with Playwright — paste `test/fixtures/scholar-profile.txt` into
+`#works` (copy it under `docs/` first; `fetch` is same-origin), a sentence into
+`#goals`, click `#plan-btn`, wait ~40s for the CDN model plus embedding. For the
+numbers that only exist mid-run (per-facet ranks, `worksHit`, `goalsHit`), a
+temporary `window.__dbg = ...` at the end of `scoreSessions` is the fast way in.
+
+Standing in facet vectors for profile vectors is a decent shortcut for *shape*
+(gap distributions, correlations, sd ratios) and useless for absolutes, since a
+facet used as its own query scores 1.0 — exclude self-matches or you'll measure
+your own fixture. And weighted quantities can't answer questions about the
+unweighted ones: comparing `w * sd` across two sources just restates the weights.
 
 ## The Scholar parser (`docs/scholar.js`)
 

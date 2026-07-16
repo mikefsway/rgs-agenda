@@ -12,7 +12,18 @@ import { parseWorks } from "./scholar.js";
 
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6";
 const EMBED_MODEL = "Xenova/bge-small-en-v1.5";
-const CLASH_EPS = 0.03;          // top-2 scores this close = genuine clash
+/* A genuine clash is one of your closest calls — a rank, not a distance.
+ *
+ * This was `runner-up within 0.03 of the pick`, an absolute gap over bge scores,
+ * and on a real profile it fired in 50–74% of slots. "Two sessions match you almost
+ * equally — your call, not ours" is honest once; three times in four it is the tool
+ * declining to choose. Session scores sit in a narrow band, so any fixed distance
+ * catches nearly every slot or none — the trap DUAL_PCTL already documents. Flag
+ * the closest fifth of the decisions you actually face and the badge stays rare and
+ * true whatever the spread turns out to be. */
+const CLASH_PCTL = 0.2;
+// Under this many real decisions, "the closest fifth" is one arbitrary slot. Don't.
+const CLASH_MIN_SLOTS = 4;
 const WEAK_REL = 0.55;           // below this normalized score, a slot is "no strong match"
 const FRAGLET_KEY = "traverse.rgs2026.fraglet";
 
@@ -115,7 +126,10 @@ const GOALS_MAX_CHUNKS = 6;
 // whole run — transformers.js pads each batch to its longest member.
 const EMBED_BATCH = 8;
 const GOALS_MAX_WEIGHT = 0.5;
-const GOALS_FULL_WEIGHT_CHARS = 300;   // ~3 real sentences earns the goals box its full weight
+// Calibrated to the goals placeholder (~180 chars) — the app's own worked example,
+// and what the hint asks for ("a couple of real sentences"). At 300 even that model
+// answer earned only 30%, so the box could never do the job the copy promises.
+const GOALS_FULL_WEIGHT_CHARS = 180;
 
 /* Split the score between the two boxes.
  *
@@ -127,8 +141,15 @@ const GOALS_FULL_WEIGHT_CHARS = 300;   // ~3 real sentences earns the goals box 
 function sourceWeights(worksChunks, goalsChunks, goalsRaw) {
   if (!goalsChunks.length) return { works: 1, goals: 0 };
   if (!worksChunks.length) return { works: 0, goals: 1 };
-  // Scale with what they actually wrote: one vague line shouldn't carry half the score.
-  const goals = GOALS_MAX_WEIGHT * Math.min(goalsRaw.trim().length / GOALS_FULL_WEIGHT_CHARS, 1);
+  /* Scale with what they actually wrote — but concavely, because the ramp *is* the
+   * blend. Both pools have near-identical spread over the facets (sd ~0.05 each, the
+   * max over 67 titles being no wider than a single sentence's), so a source's share
+   * of the weight is its share of the ranking, near enough. Linear-in-characters
+   * therefore said the 300th character informs as much as the 10th: one sharp
+   * sentence of intent scored 16% and 67 papers outvoted it. Real prose saturates —
+   * the first sentence carries most of the signal — so sqrt pays a single sentence
+   * its due while still collapsing a two-word stub to near nothing. */
+  const goals = GOALS_MAX_WEIGHT * Math.min(Math.sqrt(goalsRaw.trim().length / GOALS_FULL_WEIGHT_CHARS), 1);
   return { works: 1 - goals, goals };
 }
 
@@ -182,7 +203,15 @@ function buildFraglet(worksRaw, goalsRaw, days, mode) {
 
 // ---------- scoring (ucl-explorer facet aggregate) ----------
 
-const EV_MIN = 0.35;   // below this a facet isn't worth citing as evidence
+/* Below this a facet isn't worth citing as evidence.
+ *
+ * A rank within a box's own distribution, not an absolute similarity — the same
+ * relative-not-absolute rule DUAL_PCTL follows, and for the same reason. As a raw
+ * cosine 0.35 gated nothing whatever: on a real 67-title profile every goals best
+ * landed at 0.35+, so the aims were cited as supporting evidence on all 623
+ * sessions and the line stopped carrying any information. As a rank it means what
+ * it was always meant to — the bottom third of what a box reaches is not evidence. */
+const EV_MIN = 0.35;
 
 /* Dual-match cut-off.
  *
@@ -194,13 +223,110 @@ const EV_MIN = 0.35;   // below this a facet isn't worth citing as evidence
  *
  * Set high on purpose. The blend already floats dual matches to the top of each
  * slot, so a looser cut-off badges nearly every pick and the eye stops seeing it.
- * This marks only the standouts. */
+ * This marks only the standouts.
+ *
+ * Applied to the *weaker* of the two ranks, not to each independently — see the
+ * second pass in scoreSessions for why that distinction is the whole ballgame. */
 const DUAL_PCTL = 0.97;
 
 function percentile(values, p) {
   if (!values.length) return Infinity;
   const sorted = Float64Array.from(values).sort();
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+}
+
+/* Rank one box's per-facet similarities within its own distribution.
+ *
+ * The two pools sit in different absolute bands, and the gap is an artifact rather
+ * than a signal: measured on a real profile the works best averages 0.61 and the
+ * goals best 0.50, because a max over 67 titles is drawn from 67 chances and a max
+ * over one sentence from one. That ~0.11 says nothing about which box matches
+ * better, so raw cosines from the two boxes are not comparable and any blend of
+ * them quietly hands the bigger pool a head start on every facet. Ranking first
+ * makes them commensurable. Spread survives the transform — the two boxes already
+ * have near-identical sd (0.048 vs 0.050), so this changes the zero point, not the
+ * relative influence, which stays where sourceWeights put it. */
+function toRanks(sim) {
+  const order = Array.from(sim.keys()).sort((a, b) => sim[a] - sim[b]);
+  const rank = new Float32Array(sim.length);
+  const last = Math.max(1, order.length - 1);
+  for (let i = 0; i < order.length; i++) rank[order[i]] = i / last;
+  return rank;
+}
+
+/* Which box (or both) to credit for a facet, strongest first.
+ *
+ * By rank, not raw cosine. The works band simply sits higher than the goals band,
+ * so on raw scores the works box is cited on virtually every facet and always cited
+ * first — which is how the aims came to be quoted, identically, under all 623
+ * sessions. Ranks make "which box is really behind this" answerable. */
+function creditFor(f, sources) {
+  const from = [];
+  for (const src of sources) {
+    if (src.rank[f] >= EV_MIN && src.best.which[f] >= 0) {
+      from.push({
+        label: src.quoteLabel,
+        chunk: src.chunks[src.best.which[f]],
+        sim: src.rank[f],
+        // A quote is there to say *which* of your lines matched. A box holding a
+        // single chunk has no which — quoting it just reprints the same sentence
+        // under every session, truncated at the same word, saying nothing.
+        sole: src.chunks.length === 1,
+      });
+    }
+  }
+  return from.sort((a, b) => b.sim - a.sim);
+}
+
+// "your paper “X”" when the quote identifies something, plain "your aims" when the
+// box only holds one line and the quote would be noise.
+function creditHtml(c) {
+  return c.sole ? esc(c.label) : `${esc(c.label)} <span class="q">“${esc(trunc(c.chunk, 80))}”</span>`;
+}
+
+/* The papers closest to you, whatever session they happened to land in.
+ *
+ * The agenda is session-granular but the matching is paper-granular, and the
+ * aggregate deliberately throws the difference away: a session scores 0.75 of its
+ * best facet plus 0.25 of its top three, so depth beats a lone bullseye. That is
+ * usually right — 100 minutes in a session where everything lands beats 100 minutes
+ * for one paper and two duds — but it means the single closest paper in the
+ * programme can be invisible. On a real profile the second-best-matching paper of
+ * 3204 sat five deep inside a collapsed <details>, in a session that genuinely
+ * deserved to lose its slot. So don't fight the aggregation: report underneath it.
+ *
+ * No threshold anywhere here — it is a sort. Ranking N things needs no cut-off, and
+ * every absolute cut-off over bge scores in this file has had to be walked back to a
+ * percentile eventually. */
+const TOP_PAPERS = 10;
+// One session's papers shouldn't eat the list: if five of your ten live in the same
+// room, that says one thing ("go there"), which the route already said. Capping at
+// two spends the rest of the list on sessions you'd otherwise never hear about.
+const TOP_PAPERS_PER_SESSION = 2;
+
+function topPapers(facets, facetScore, sessions, allowed, sources) {
+  const cand = [];
+  for (let f = 0; f < facets.length; f++) {
+    if (facets[f].kind === "paper" && allowed.has(facets[f].s)) cand.push(f);
+  }
+  cand.sort((a, b) => facetScore[b] - facetScore[a]);
+  const perSession = new Map();
+  const seen = new Set();
+  const out = [];
+  for (const f of cand) {
+    if (out.length >= TOP_PAPERS) break;
+    const si = facets[f].s;
+    const used = perSession.get(si) || 0;
+    if (used >= TOP_PAPERS_PER_SESSION) continue;
+    // The programme lists some papers twice (same title, two sessions); dedupe on
+    // the title the same way the Scholar parser does.
+    const key = facets[f].label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    perSession.set(si, used + 1);
+    out.push({ label: facets[f].label, session: sessions[si], score: facetScore[f], from: creditFor(f, sources) });
+  }
+  return out;
 }
 
 // Best similarity + winning chunk per facet, for one source pool.
@@ -226,12 +352,26 @@ function scoreSessions(profile, filters) {
   const w = profile.weights;
   const W = { ...profile.works, best: bestPerFacet(profile.works.vecs) };
   const G = { ...profile.goals, best: bestPerFacet(profile.goals.vecs) };
+  W.rank = toRanks(W.best.sim);
+  G.rank = toRanks(G.best.sim);
 
-  // Weights sum to 1, so the blend stays on the same 0–1 scale as a raw
-  // similarity — EV_MIN and the weak-slot threshold keep their calibration.
+  /* Blend as a weighted *geometric* mean of the two ranks, because the point of
+   * asking twice is agreement.
+   *
+   * A weighted arithmetic mean is compensatory: it rewards a high total, so a
+   * session the works box barely reaches (rank p59) can ride a strong aims rank
+   * (p100) straight into the agenda, and one did. A product cannot be bought that
+   * way — a weak rank on either side drags the result down, and only a session both
+   * boxes reach scores well, which is what the two boxes promise on the landing
+   * page. Weights are exponents rather than coefficients, so they still divide the
+   * influence, and a box that is empty (weight 0) contributes a factor of exactly 1
+   * and lets the other pass through untouched.
+   *
+   * Result is a joint rank in 0–1, not a similarity. EV_MIN and the weak-slot
+   * threshold read it as such; norm() min-maxes it, so the match bar is unaffected. */
   const facetScore = new Float32Array(nFacets);
   for (let f = 0; f < nFacets; f++) {
-    facetScore[f] = w.works * W.best.sim[f] + w.goals * G.best.sim[f];
+    facetScore[f] = Math.pow(W.rank[f], w.works) * Math.pow(G.rank[f], w.goals);
   }
 
   // aggregate per session
@@ -242,10 +382,12 @@ function scoreSessions(profile, filters) {
     perSession.get(s).push(f);
   }
   const results = [];
+  const allowed = new Set();
   for (const [si, fIdxs] of perSession) {
     const sess = sessions[si];
     if (!filters.days.has(sess.day)) continue;
     if (!modeAllowed(sess.mode, filters.mode)) continue;
+    allowed.add(si);
     fIdxs.sort((a, b) => facetScore[b] - facetScore[a]);
     const top = fIdxs.slice(0, 3).map((f) => facetScore[f]);
     const score = 0.75 * top[0] + 0.25 * (top.reduce((a, b) => a + b, 0) / top.length);
@@ -265,27 +407,41 @@ function scoreSessions(profile, filters) {
       const kind = facets[f].kind;
       // at most one "session theme" line; papers are individually informative
       if (kind === "session" && evidence.some((e) => e.kind === "session")) continue;
-      const from = [];
-      for (const src of [W, G]) {
-        if (src.best.sim[f] >= EV_MIN && src.best.which[f] >= 0) {
-          from.push({ label: src.quoteLabel, chunk: src.chunks[src.best.which[f]], sim: src.best.sim[f] });
-        }
-      }
-      from.sort((a, b) => b.sim - a.sim);
-      evidence.push({ kind, label: facets[f].label, score: facetScore[f], from });
+      evidence.push({ kind, label: facets[f].label, score: facetScore[f], from: creditFor(f, [W, G]) });
     }
     results.push({ session: sess, score, evidence, worksHit, goalsHit, dual: false });
   }
 
-  // Second pass: the badge only means something once we know the spread.
+  /* Second pass: the badge only means something once we know the spread.
+   *
+   * Badge on the *weaker* of the two ranks. "Both point here" is a claim about the
+   * side that agrees least, so that is the side to threshold. Asking instead for the
+   * top 3% of each box independently sounds equivalent and is not: the two ranks are
+   * only loosely correlated, so the joint event is nearer 0.1% than 3% and the badge
+   * fired on 0 of 623 sessions — including the best dual match in the agenda (works
+   * p89, aims p100), which missed on a works rank that was merely very good. Taking
+   * a percentile of the min is self-calibrating: the top slice by agreement exists
+   * whatever the correlation turns out to be. */
   if (w.works > 0 && w.goals > 0) {
-    const tw = percentile(results.map((r) => r.worksHit), DUAL_PCTL);
-    const tg = percentile(results.map((r) => r.goalsHit), DUAL_PCTL);
-    for (const r of results) r.dual = r.worksHit >= tw && r.goalsHit >= tg;
+    const rankIn = (vals) => {
+      const sorted = Float64Array.from(vals).sort();
+      return (v) => {
+        let lo = 0, hi = sorted.length;
+        while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < v) lo = mid + 1; else hi = mid; }
+        return lo / Math.max(1, sorted.length - 1);
+      };
+    };
+    const rw = rankIn(results.map((r) => r.worksHit));
+    const rg = rankIn(results.map((r) => r.goalsHit));
+    const agree = results.map((r) => Math.min(rw(r.worksHit), rg(r.goalsHit)));
+    const t = percentile(agree, DUAL_PCTL);
+    results.forEach((r, i) => { r.dual = agree[i] >= t; });
   }
 
   results.sort((a, b) => b.score - a.score);
-  return results;
+  // Papers respect the day/mode filters for the same reason the route does: there is
+  // no point being shown the perfect paper on a day you aren't here.
+  return { results, papers: topPapers(facets, facetScore, sessions, allowed, [W, G]) };
 }
 
 function modeAllowed(mode, filter) {
@@ -316,27 +472,40 @@ function buildAgenda(results) {
     if (!slots.has(key)) slots.set(key, []);
     slots.get(key).push(r);
   }
-  const days = new Map();
-  for (const [key, list] of [...slots.entries()].sort()) {
+  // First pass: rank each slot and find the ones too weak to be worth a decision.
+  const prepared = [...slots.entries()].sort().map(([key, list]) => {
     const [day] = key.split("|");
     list.sort((a, b) => b.score - a.score);
     const substantive = list.filter((r) => !isAdminSession(r.session));
     const ranked = substantive.length ? substantive : list;
-    const top = ranked[0];
-    const weak = norm(top.score) < WEAK_REL || !substantive.length;
-    const clash = !weak && ranked.length > 1 && ranked[1].score >= top.score - CLASH_EPS;
+    const weak = norm(ranked[0].score) < WEAK_REL || !substantive.length;
+    // Infinity, not 0, for a one-session slot: no runner-up means no contest, and it
+    // must not count as the closest call of the day.
+    const gap = ranked.length > 1 ? ranked[0].score - ranked[1].score : Infinity;
+    return { day, list, ranked, weak, gap };
+  });
+
+  // Second pass: "closest" only means something once every gap is known. Measure
+  // over the real decisions — weak slots aren't ones you're choosing in.
+  const gaps = prepared.filter((p) => !p.weak && p.gap < Infinity).map((p) => p.gap);
+  const clashMax = gaps.length >= CLASH_MIN_SLOTS ? percentile(gaps, CLASH_PCTL) : -Infinity;
+
+  const days = new Map();
+  for (const p of prepared) {
+    const clash = !p.weak && p.gap <= clashMax;
+    const top = p.ranked[0];
     const slot = {
       start: top.session.start,
       end: top.session.end,
-      parallel: list.length,
+      parallel: p.list.length,
       pick: top,
-      clashWith: clash ? ranked[1] : null,
-      alternatives: ranked.slice(clash ? 2 : 1, clash ? 5 : 4),
-      weak,
+      clashWith: clash ? p.ranked[1] : null,
+      alternatives: p.ranked.slice(clash ? 2 : 1, clash ? 5 : 4),
+      weak: p.weak,
       relStrength: norm(top.score),
     };
-    if (!days.has(day)) days.set(day, []);
-    days.get(day).push(slot);
+    if (!days.has(p.day)) days.set(p.day, []);
+    days.get(p.day).push(slot);
   }
   return { days, norm };
 }
@@ -358,7 +527,7 @@ function evidenceHtml(ev) {
       const key = `${f.label}|${f.chunk}`;
       if (seen.has(key)) continue;   // don't quote the same line of input twice
       seen.add(key);
-      parts.push(`${esc(f.label)} <span class="q">“${esc(trunc(f.chunk, 80))}”</span>`);
+      parts.push(creditHtml(f));
     }
     const from = parts.length ? ` — from ${parts.join(" and ")}` : "";
     return `<li><span class="why">Matches ${what}</span>${from}</li>`;
@@ -368,13 +537,25 @@ function evidenceHtml(ev) {
 
 function trunc(s, n) { return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s; }
 
+/* Ex Ordo names 456 of the 623 rooms "In-person 10" and the like, so printing the
+ * room and then the mode gives you "In-person 10 · in person" on most of the
+ * programme. If the room name already says it, don't say it again. */
+function metaBits(s) {
+  const modeLabel = { "in-person": "in person", hybrid: "hybrid", online: "online", unspecified: "" }[s.mode];
+  const venue = s.venue || "venue tbc";
+  const venueSaysMode = modeLabel && venue.toLowerCase().replace(/-/g, " ").startsWith(modeLabel);
+  const papers = s.papers.length
+    ? `${s.papers.length} paper${s.papers.length === 1 ? "" : "s"}`
+    : "panel/plenary";
+  return [s.code, venue, venueSaysMode ? "" : modeLabel, papers].filter(Boolean);
+}
+
 function pickHtml(r, norm, { clash = false } = {}) {
   const s = r.session;
-  const modeLabel = { "in-person": "in person", hybrid: "hybrid", online: "online", unspecified: "" }[s.mode];
   return `<article class="pick${clash ? " clash-a" : ""}">
     ${r.dual ? `<span class="dual-flag">Your work and your aims both point here</span>` : ""}
     <h4>${esc(s.title)}</h4>
-    <span class="meta mono">${[s.code, s.venue || "venue tbc", modeLabel, s.papers.length ? s.papers.length + " papers" : "panel/plenary"].filter(Boolean).map(esc).join(" · ")}</span>
+    <span class="meta mono">${metaBits(s).map(esc).join(" · ")}</span>
     <div class="match-bar" role="img" aria-label="match strength ${Math.round(norm(r.score) * 100)} of 100"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
     ${evidenceHtml(r.evidence)}
   </article>`;
@@ -405,13 +586,53 @@ function slotHtml(slot, norm) {
   return `<div class="slot">${time}${body}${alts}</div>`;
 }
 
-function render(results, agenda) {
+/* Which sessions the route is actually sending you to — picks and both halves of a
+ * clash, but not the alternatives, which are already presented as roads not taken. */
+function routedSessionIds(days) {
+  const ids = new Set();
+  for (const slots of days.values()) {
+    for (const s of slots) {
+      if (s.weak) continue;
+      ids.add(s.pick.session.id);
+      if (s.clashWith) ids.add(s.clashWith.session.id);
+    }
+  }
+  return ids;
+}
+
+function papersHtml(papers, routed) {
+  if (!papers.length) return "";
+  const rows = papers.map((p) => {
+    const inRoute = routed.has(p.session.id);
+    const quote = p.from.length ? `<div class="paper-why">Matches ${creditHtml(p.from[0])}</div>` : "";
+    const flag = inRoute
+      ? `<span class="paper-flag in-route">already in your route</span>`
+      : `<span class="paper-flag catch">worth catching</span>`;
+    return `<li>
+      <div class="paper-title">${esc(p.label)}</div>
+      <div class="paper-where mono">${fmtDay.format(new Date(p.session.start)).split(",")[0]} ${t(p.session.start)} ·
+        ${esc(p.session.title)}${p.session.venue ? ` · ${esc(p.session.venue)}` : ""}</div>
+      ${quote}${flag}
+    </li>`;
+  }).join("");
+  return `<div class="papers-card">
+    <h3>The ${papers.length} papers closest to you</h3>
+    <p class="hint">Ranked paper by paper rather than session by session. An agenda has to be
+    chosen a slot at a time, so a single paper that lands squarely on your work can be outvoted
+    by the session around it — these are the papers themselves.</p>
+    <ol class="paper-list">${rows}</ol>
+  </div>`;
+}
+
+function render(results, agenda, papers) {
   const { days, norm } = agenda;
   const top5 = results.filter((r) => !isAdminSession(r.session)).slice(0, 5);
   $("#overview").innerHTML = `<div class="overview-card">
     <h3>If you only make five sessions</h3>
     ${top5.map((r) => `<div>• ${esc(r.session.title)} <span class="mono">(${fmtDay.format(new Date(r.session.start)).split(",")[0]} ${t(r.session.start)})</span></div>`).join("")}
   </div>`;
+
+  $("#papers").innerHTML = papersHtml(papers, routedSessionIds(days));
 
   const tabs = [...days.keys()].map((d) =>
     `<button type="button" data-day="${d}">${fmtDay.format(new Date(d + "T12:00:00Z"))}</button>`).join("");
@@ -490,10 +711,10 @@ async function plan() {
     profile.goals.vecs = await embedBatched(embed, profile.goals.chunks, () => {});
     setStatus("charting the route…");
     await new Promise((r) => setTimeout(r, 30)); // let status paint
-    const results = scoreSessions(profile, { days, mode });
+    const { results, papers } = scoreSessions(profile, { days, mode });
     if (!results.length) { setStatus("no sessions match those filters."); return; }
     const agenda = buildAgenda(results);
-    render(results, agenda);
+    render(results, agenda, papers);
     const fraglet = buildFraglet(worksRaw, goalsRaw, [...days], mode);
     localStorage.setItem(FRAGLET_KEY, JSON.stringify(fraglet));
     $("#save-fraglet").hidden = false;
