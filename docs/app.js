@@ -560,8 +560,11 @@ function topPapers(facets, facetScore, sessions, allowed, sources) {
 
 /* Who is doing the work nearest yours — as near as the public data allows.
  *
- * Ex Ordo publishes no author names, only presenting affiliations, so "people"
- * here means institutions and research groups, and the copy says so. Institutions
+ * Ex Ordo withholds paper author names and publishes only presenting
+ * affiliations, so this is institutions and research groups. The tab was called
+ * "People" and spent its first paragraph explaining that it wasn't; it is now
+ * labelled "Institutions & groups" and the explanation is one plain sentence.
+ * The internal name stays `people` — it keys the saved route. Institutions
  * are ranked by how many of their papers land in the top decile of the paper-facet
  * distribution (a percentile, not an absolute cosine — same rule as everywhere),
  * tiebroken by their best paper. Groups are ranked like sessions are: mean of the
@@ -1090,9 +1093,9 @@ function peopleHtml(people) {
   const inst = people.institutions.length
     ? `<div class="people-card">
         <h3>Institutions doing work near yours</h3>
-        <p class="hint">The programme doesn't publish author names, only presenting
-        affiliations — so this is as close to "people" as the public data gets. Ranked by how
-        many of their papers land in the top tenth of your matches.</p>
+        <p class="hint">The programme publishes presenting affiliations but no author names,
+        so this ranks institutions rather than researchers. Ordered by how many of their
+        papers land in the top tenth of your matches.</p>
         <ol class="inst-list">${people.institutions.map((r) => `
           <li>
             <div class="inst-head"><strong>${esc(r.name)}</strong>

@@ -100,9 +100,11 @@ fixed threshold badges everything or nothing.
   pick" resolves it; both persist and re-rank instantly from scores in memory.
 - Slots with no strong match are honestly labelled.
 - Results are tabbed: the **route**, the **closest papers** (paper-granular,
-  under the session aggregate), **people** (institutions by presenting
-  affiliation + RGS-IBG research groups — the public API has no author names),
-  and a **look-up** ("where did session X rank for me, and why").
+  under the session aggregate), **institutions & groups** (institutions by
+  presenting affiliation + RGS-IBG research groups), and a **look-up** ("where
+  did session X rank for me, and why"). That tab was called "People" until it
+  was pointed out that it shows neither authors nor names; the label now
+  matches what the public data actually supports.
 - **ICS export** of the chosen route; unresolved clashes export as two
   overlapping events, which is what they are.
 - During 1–4 September the route marks the current/next slot and opens there.
@@ -118,8 +120,8 @@ blanked in the public API; matching uses session descriptions and paper titles.
 **Paper author names are withheld** — `paper_authors` carries only a presenting
 affiliation, and asking the API to expand the user behind it makes it drop the
 author rows altogether. Convenor and chair names *are* public (747 people across
-539 sessions, via `session_organisers`), which is why the People tab is
-institutions rather than authors; see CLAUDE.md.
+539 sessions, via `session_organisers`), so naming convenors remains possible
+if the tab ever wants people in it; see CLAUDE.md.
 Re-run all three steps after any further programme change:
 
 ```

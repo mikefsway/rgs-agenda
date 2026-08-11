@@ -80,7 +80,7 @@
   <nav id="view-tabs" class="view-tabs" role="tablist" aria-label="Result views">
     <button type="button" role="tab" data-view="route" aria-selected="true">Route</button>
     <button type="button" role="tab" data-view="papers" aria-selected="false">Papers</button>
-    <button type="button" role="tab" data-view="people" aria-selected="false">People</button>
+    <button type="button" role="tab" data-view="people" aria-selected="false">Institutions &amp; groups</button>
     <button type="button" role="tab" data-view="lookup" aria-selected="false">Look up</button>
   </nav>
 
@@ -96,7 +96,9 @@
     <div id="papers"></div>
   </div>
 
-  <div id="view-people" class="view" role="tabpanel" aria-label="People" hidden>
+  <!-- id and data-view stay "people": they key the saved route and the tab
+       wiring. Only the label changed, because the tab never showed people. -->
+  <div id="view-people" class="view" role="tabpanel" aria-label="Institutions and groups" hidden>
     <div id="people"></div>
   </div>
 

@@ -325,7 +325,11 @@ none is genuinely unknown.
   That is 747 distinct named people across 539 of 593 sessions — 1,206 convenor
   roles, 649 panel chairs, 24 discussants — with organisation attached.
 
-So "the programme has no names in it" is too strong, and the People tab is
-institutions **because paper authorship is withheld**, not because the data has
-no people in it at all. If the tab ever names people, it can only name
-convenors and chairs, and it should say which.
+So "the programme has no names in it" is too strong: the tab shows institutions
+**because paper authorship is withheld**, not because the data has no people in
+it at all. That tab was called "People" and opened by explaining that it wasn't;
+it is now **"Institutions & groups"**, which is what it has always shown. Its
+internal name is still `people` — that keys `STATE.people` and the saved route,
+so renaming it would invalidate stored routes for no gain. If it ever does name
+people, convenors and chairs are the only ones available, and it should say so
+rather than implying the authors are in there.
