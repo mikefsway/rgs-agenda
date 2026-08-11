@@ -18,7 +18,11 @@
 // embeddings.bin could sit beside a fresh facets.json indefinitely.
 // v3: the final programme (11 Aug 2026) changed all four data files at once —
 // exactly the case stale-while-revalidate gets wrong on its own.
-const CACHE = "traverse-v3";
+// v4: rooms for the 164 RGS-IBG sessions, which arrive on virtual_stage rather
+// than virtual_venue. Mandatory rather than cosmetic: sessions.json was
+// reordered, so a cached embeddings.bin beside the new sessions.json now trips
+// the order_sig check and refuses to load at all.
+const CACHE = "traverse-v4";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

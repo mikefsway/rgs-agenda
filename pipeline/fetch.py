@@ -32,7 +32,11 @@ DAYS = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"]
 BASE = "https://event.ac2026.exordo.com/api/virtual_published_contents"
 EXPAND = (
     "virtual_content.schedule_event.schedule_event_presentations.paper.paper_authors,"
-    "virtual_venue"
+    "virtual_venue,"
+    # Sessions in the RGS-IBG building itself carry no virtual_venue at all —
+    # their room is on virtual_stage ("Ondaatje Theatre, RGS-IBG"). That is 164
+    # of 593 sessions, i.e. every one that would otherwise read "venue tbc".
+    "virtual_stage"
 )
 PAGE_SIZE = 15  # server clamps to this anyway; asking for more just lies to you
 

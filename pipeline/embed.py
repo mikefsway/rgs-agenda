@@ -48,6 +48,24 @@ def chunk(text: str) -> list[str]:
     return parts
 
 
+def order_sig(sessions: list[dict]) -> str:
+    """djb2 over the session ids, in row order.
+
+    facets.json addresses sessions by *index*, so the matrix is only meaningful
+    against the exact ordering of sessions.json that produced it. Nothing in the
+    old counts-based dataSig noticed a permutation — n_facets and n_sessions are
+    identical before and after — and a permuted matrix fails silently: every
+    session still gets a plausible score, just someone else's. Shipping this
+    signature lets the browser refuse the pairing outright. Mirrors profileSig
+    in docs/app.js; keep the two implementations in step.
+    """
+    s = "|".join(str(x["id"]) for x in sessions)
+    h = 5381
+    for ch in s:
+        h = ((h * 33) ^ ord(ch)) & 0xFFFFFFFF
+    return np.base_repr(h, 36).lower()
+
+
 def main() -> None:
     from sentence_transformers import SentenceTransformer
 
@@ -72,7 +90,7 @@ def main() -> None:
     (DATA / "facets.json").write_text(json.dumps(facets, ensure_ascii=False))
     (DATA / "meta.json").write_text(json.dumps({
         "model": MODEL, "dim": int(mat.shape[1]), "n_facets": int(mat.shape[0]),
-        "n_sessions": len(sessions), "dtype": "float16",
+        "n_sessions": len(sessions), "order_sig": order_sig(sessions), "dtype": "float16",
         "query_prefix": "Represent this sentence for searching relevant passages: ",
     }))
     print(f"{mat.shape[0]} facets x {mat.shape[1]} dims -> embeddings.bin "

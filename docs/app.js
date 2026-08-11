@@ -119,11 +119,35 @@ async function fetchData() {
     fetch("data/embeddings.bin").then((r) => r.arrayBuffer()),
   ]);
   const matrix = f16ToF32(new Uint16Array(binBuf));
+  assertOrder(meta, sessionsDoc.sessions);
   const byId = new Map(sessionsDoc.sessions.map((s) => [s.id, s]));
   DATA = { sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta, byId };
   const n = $("#n-sessions");
   if (n) n.textContent = DATA.sessions.length;
   return DATA;
+}
+
+/* facets.json addresses sessions by index, so the matrix is only meaningful
+ * against the ordering of sessions.json that built it. That pairing broke once,
+ * from a data-only edit: filling in 164 missing rooms reordered sessions.json,
+ * because the sort key included venue. Counts can't see it — n_facets and
+ * n_sessions are identical either side of a permutation — and the symptom is
+ * not an error but a plausible agenda citing the wrong sessions. So embed.py
+ * ships a hash of the id order and we refuse the pair outright if it moved.
+ * Old data with no order_sig is let through; there is nothing to check it
+ * against, and the counts guard still applies. */
+function assertOrder(meta, sessions) {
+  if (!meta.order_sig) return;
+  const s = sessions.map((x) => x.id).join("|");
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  const got = h.toString(36);
+  if (got !== meta.order_sig) {
+    throw new Error(
+      `programme data is inconsistent: sessions.json is ordered ${got}, but the ` +
+      `embeddings were built for ${meta.order_sig}. Re-run pipeline/embed.py.`
+    );
+  }
 }
 
 // Route and embedding caches are only valid against the data they were built

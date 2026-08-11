@@ -90,7 +90,8 @@ fixed threshold badges everything or nothing.
 - Sessions grouped into parallel timeslots (4 main blocks/day, ~43–49 options each).
 - Top pick per slot with evidence, match bar, and the session's contents
   (description + paper list + link to the official Ex Ordo page, which routes
-  on `eid`); next 3 as collapsible alternatives.
+  on `eid`); next 3 as collapsible alternatives. Rooms come from `virtual_venue`
+  or, for the 164 sessions inside the RGS-IBG building, `virtual_stage`.
 - **Clash rule** (from gridflex-sim `household_flex`): if the gap between the
   top two is in the closest fifth of the slots you're actually deciding
   (a percentile, not a distance), render a fork with both options. Never
@@ -114,7 +115,11 @@ programme, which replaced the July draft's placeholder rooms ("In-person 10")
 with real ones and settled the running order: 103 draft sessions went,
 75 arrived, 518 stayed, and the paper count rose 2,074 → 2,217. Paper abstracts are
 blanked in the public API; matching uses session descriptions and paper titles.
-Author names are not published there either — only presenting affiliations.
+**Paper author names are withheld** — `paper_authors` carries only a presenting
+affiliation, and asking the API to expand the user behind it makes it drop the
+author rows altogether. Convenor and chair names *are* public (747 people across
+539 sessions, via `session_organisers`), which is why the People tab is
+institutions rather than authors; see CLAUDE.md.
 Re-run all three steps after any further programme change:
 
 ```
@@ -122,6 +127,11 @@ python3 pipeline/fetch.py       # -> data/raw/day_YYYY-MM-DD.json (paged; see it
 python3 pipeline/normalize.py   # -> docs/data/sessions.json
 <venv-with-sentence-transformers>/bin/python pipeline/embed.py
 ```
+
+`embed.py` is not optional after a `normalize.py` change, even a display-only
+one: `facets.json` indexes sessions by row, so anything that reorders
+`sessions.json` invalidates the matrix. The browser refuses a mismatched pair
+via `order_sig` rather than quietly scoring against the wrong sessions.
 
 Then bump `CACHE` in `docs/sw.js`: the data files only make sense as a set, and
 stale-while-revalidate will otherwise refresh them on separate schedules.

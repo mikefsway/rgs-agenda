@@ -234,6 +234,29 @@ lessons, the hard way, on the same user's machine:
   data files, which once served a 623-session sessions.json against a
   621-session facets.json. `fetch(url, {cache: "reload"})` before measuring.
 
+## sessions.json row order is load-bearing
+
+`facets.json` addresses sessions by **index**, so `embeddings.bin` is only
+meaningful against the exact ordering of `sessions.json` that produced it, and
+`normalize.py`'s sort key decides that ordering. It used to include `venue` —
+which made row order a function of a display field. Filling in the 164 missing
+rooms therefore permuted `sessions.json` while the matrix still described the
+old order: every session would have been scored against someone else's facets.
+
+Nothing existing caught it. `dataSig` is `n_facets|n_sessions` and both are
+identical either side of a permutation, the embedder self-check verifies the
+matrix against `facets.json` labels and never consults `sessions.json`, and the
+symptom is not an error but a plausible agenda quoting the wrong papers. The
+sort key is now `(start, id)` — both fixed by the programme, so no content edit
+can move a row — and `embed.py` ships `order_sig` (djb2 over the ids in row
+order) which `assertOrder` re-derives at load and throws on. Verified to fire
+on the real regression, not just a synthetic swap.
+
+Two rules follow. A data-only change can still invalidate the matrix, so
+**re-run `embed.py` after any `normalize.py` change**, even one that touches no
+text. And when adding a field, ask whether it feeds the sort before you ask how
+it renders.
+
 ## Data
 
 Programme comes from the public Ex Ordo API (no auth). Refreshed to the **final
@@ -277,6 +300,32 @@ Two id systems: `sessions[].id` is the virtual_published_content id (stable
 row identity, used for localStorage joins); `sessions[].eid` is the
 schedule_event id, which is what the public site routes on
 (`/session/<eid>/<slug>`). They differ for 579 of 593 sessions — linking on
-`id` gives you someone else's session. The public API publishes **no author
-names**, only presenting affiliations — hence the People tab is institutions
-and research groups, and says so.
+`id` gives you someone else's session.
+
+**Rooms live in two different fields.** Imperial rooms arrive as
+`virtual_venue`; the 164 sessions staged in the RGS-IBG building itself have
+`virtual_venue: null` and their room on `virtual_stage` ("Ondaatje Theatre,
+RGS-IBG"). Read only the first and a quarter of the programme says "venue tbc"
+while the public site cheerfully prints the room. Every session has a location;
+none is genuinely unknown.
+
+**Paper author names are not public; convenor names are.** Re-probed 11 Aug
+2026 and the distinction is deliberate, not an oversight:
+
+- `paper_authors` bare returns rows whose only identifying field is
+  `identity_string`, which holds an *affiliation* ("University of St Andrews").
+  Ask for `paper_authors.user` — or `.organisation` — and the API returns
+  `paper_authors: []`, dropping the rows entirely rather than filling them in.
+  It is an authorisation rule: the site's own JS requests exactly that expansion
+  and only gets names when logged in. The public session page shows no author
+  names against papers either.
+- `session_organisers` **is** public, names included, and expands on the same
+  paged list endpoint we already fetch:
+  `virtual_content.schedule_event.session_organisers,…session_organisers.user`.
+  That is 747 distinct named people across 539 of 593 sessions — 1,206 convenor
+  roles, 649 panel chairs, 24 discussants — with organisation attached.
+
+So "the programme has no names in it" is too strong, and the People tab is
+institutions **because paper authorship is withheld**, not because the data has
+no people in it at all. If the tab ever names people, it can only name
+convenors and chairs, and it should say which.

@@ -95,11 +95,24 @@ def main() -> None:
                 "day": day,
                 "start": rec["starts_at"],
                 "end": rec["ends_at"],
-                "venue": (rec.get("virtual_venue") or {}).get("name") or "",
+                # Two places hold a room, and which one is populated depends on
+                # the building. Imperial rooms arrive as virtual_venue; anything
+                # staged in the RGS-IBG itself has virtual_venue: null and the
+                # room on virtual_stage instead. Reading only the first shows
+                # "venue tbc" on 164 sessions whose room is perfectly well known.
+                "venue": ((rec.get("virtual_venue") or {}).get("name")
+                          or (rec.get("virtual_stage") or {}).get("name") or ""),
                 "description": strip_html(se.get("description")),
                 "papers": papers,
             })
-    sessions.sort(key=lambda s: (s["start"], s["venue"], s["id"]))
+    # Sort on immutable identity only. This used to include venue, which made
+    # row order a function of a *display* field: filling in the 164 missing
+    # rooms silently permuted sessions.json while embeddings.bin still pointed
+    # at the old order, so every facet would have cited the wrong session — a
+    # data-only change corrupting a matrix nobody thought to rebuild. `start`
+    # and `id` are both fixed by the programme, so a venue or title edit can no
+    # longer move a row. Any reordering here still requires re-running embed.py.
+    sessions.sort(key=lambda s: (s["start"], s["id"]))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({"conference": "RGS-IBG Annual International Conference 2026",
                                "generated_from": "event.ac2026.exordo.com public programme API",
