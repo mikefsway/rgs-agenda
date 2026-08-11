@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Traverse — your route through RGS-IBG 2026</title>
-<meta name="description" content="Paste your research interests and goals; get a personalised route through the sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs entirely in your browser.">
+<title>Navigator -- your (unofficial) route through RGS-IBG 2026</title>
+<meta name="description" content="Enter your research interests and goals, and get a personalised (unofficial) guide to the sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
@@ -15,35 +15,36 @@
 
 <header class="topbar">
   <div class="wrap">
-    <p class="wordmark"><span class="mark">traverse</span> <span class="dot">·</span> rgs-ibg 2026</p>
-    <span class="mono">1–4 September, London</span>
+    <p class="wordmark"><span class="mark">navigator</span> <span class="dot">·</span> rgs-ibg 2026</p>
+    <span class="mono">1-4 September, London</span>
   </div>
 </header>
 
 <div class="intro wrap">
   <p class="lede">Paste what you work on and get a timetable for the RGS-IBG Annual
   International Conference, picked out of all <span id="n-sessions">600+</span> sessions.</p>
-  <p class="privacy-note">It runs in your browser. What you paste is matched on this device
-  against the public programme and never uploaded.</p>
+  <p class="privacy-note">What you paste is matched on this device against the public programme; it runs on your
+  browser and is never uploaded.</p>
 </div>
 
 <main>
 <section class="panel wrap" id="profile-panel" aria-labelledby="profile-h">
   <h2 id="profile-h">Your interests and goals</h2>
-  <p class="hint">Fill in either box, ideally both. Sessions that match your past work
-  <em>and</em> your current plans rise to the top.</p>
+  <p class="hint">Fill in either box, ideally both. Sessions that match your past work and your current
+  plans rise to the top.</p>
 
   <label class="box-label" for="works">What you've worked on</label>
-  <p class="hint">Paste your Google Scholar profile (select the publication table and copy),
-  a publication list, or a bio. Scholar pastes get cleaned up automatically — authors, journals
-  and citation counts are stripped before matching.</p>
+  <p class="hint">Paste your Google Scholar profile (select the full publication table and copy), a
+  publication list, or a bio. Scholar pastes get cleaned up automatically -- authors,
+  journals and citation counts are stripped before matching.</p>
   <textarea id="works" rows="7" spellcheck="false"
     placeholder="Paste your Google Scholar profile, a publication list, or a short bio."></textarea>
   <p class="parse-note" id="works-note" hidden></p>
 
   <label class="box-label" for="goals">What you're working on now, and what you want from the week</label>
-  <p class="hint">Write it like you'd tell a colleague. Two or three sentences carry a lot of
-  weight here — this is the only place the matcher learns where you're heading.</p>
+  <p class="hint">This is where the matcher learns what you are really keen to get out of the conference.
+  It doesn't need to be long, but be sure to include the key topics and themes you are
+  currently interested in.</p>
   <textarea id="goals" rows="4" spellcheck="false"
     placeholder="e.g. I'm moving from tariff design into energy justice fieldwork and want to find people doing longitudinal survey work in the Global South. Also hoping to meet potential postdoc hosts."></textarea>
 
