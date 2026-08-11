@@ -164,6 +164,32 @@ Hugging Face going away (the ~30 MB model is fetched at first visit and nothing
 works without it), or the Ex Ordo programme moving under the shipped copy. It
 runs daily in Actions, where a failing scheduled workflow is the notification.
 
+## Editing the copy
+
+```
+node tools/copyedit.mjs                       # on the machine holding the repo
+ssh -L 7000:localhost:7000 <that machine>     # from anywhere else
+```
+
+Then open `http://localhost:7000`: one box per piece of copy — 43 of them in
+`docs/index.html`, including the page title, meta description, placeholders and
+aria-labels. Save writes the file back with everything else untouched, keeping
+the hand-wrapping. Publish runs the tests, commits and pushes.
+
+It won't let you delete an element `app.js` looks up by id, or leave a tag
+unclosed; a failed check writes nothing. Markup is allowed in every field
+(`<em>`, a link), so the guards are what make that safe. It binds to 127.0.0.1
+only — the SSH tunnel is the access control, which is why there's no login.
+
+Nothing in it is specific to this site: `node tools/copyedit.mjs some/page.html`
+works on any static HTML. It deliberately does *not* bump `CACHE` in `sw.js` —
+that would re-download 2.5 MB of embeddings to fix a typo, and
+stale-while-revalidate picks new text up on the visit after next anyway.
+
+Copy that lives in `docs/app.js` (status messages, "If you only make five
+sessions", the empty and error states) isn't in there, and still needs an edit
+to the source.
+
 ## Design
 
 One rule holds the interface together: **yellow means "this is the one"** — the

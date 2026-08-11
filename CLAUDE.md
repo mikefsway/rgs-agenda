@@ -152,6 +152,31 @@ away, or the programme moving. It runs daily in Actions, where the failing
 workflow *is* the notification. Point it at localhost to check a build before
 pushing.
 
+## Copy edits go through the tool, not the file
+
+`node tools/copyedit.mjs` serves a box-per-string editor on 127.0.0.1:7000, for
+editing `docs/index.html` over an SSH tunnel without opening the HTML. It exists
+because the alternative on a headless Pi is nano, and nano on a 128-line HTML
+file is how ids get deleted.
+
+Two things to keep true if you touch it:
+
+- **It writes only the span between the tags.** Attributes, ids, indentation and
+  the hand-wrapping all survive a save, and a no-op save is byte-identical.
+  That's what makes it safe to run against a file with real structure in it.
+- **The guards are load-bearing, because markup is allowed in every field.** It
+  refuses a save that would delete an element `app.js` looks up by id (it greps
+  app.js for `$("#…")` to find them), that changes the number of
+  `<script>`/`<link>`/`<input>`/`<button>` tags, or that leaves a tag unclosed.
+  A failed check writes nothing. Loosen a guard and the failure mode is a page
+  that still renders and quietly stops working.
+
+It does not touch `docs/app.js`, so the copy in there — status messages, the
+overview heading, weak-slot and clash lines, `failureMessage` — is still a
+source edit. Moving it behind a `COPY` object would bring it into the tool; it
+hasn't been done because the research-group name table is prose too and must
+not end up in an editor as if it were copy.
+
 ## Verifying a scoring change
 
 Proxies lie, so run the real model over the real profile:
