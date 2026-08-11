@@ -25,7 +25,14 @@
 // v5: the redesign. index.html, style.css and app.js changed together — the
 // markup and the stylesheet have to arrive from the same deploy or the route
 // renders unstyled against a grid that no longer exists.
-const CACHE = "traverse-v5";
+// v6: the email redaction of 12 Aug 2026. All four data files changed together
+// (normalize.py rewrote descriptions, so embed.py had to re-run), which is the
+// case stale-while-revalidate cannot get right on its own — and here a stale
+// copy is not merely inconsistent, it is the unredacted one still sitting in a
+// visitor's cache. build.html and build.js landed in the same deploy but are
+// deliberately NOT in SHELL: the point of the cache is a route that opens in a
+// seminar room with no signal, and nobody needs the porting page offline.
+const CACHE = "traverse-v6";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

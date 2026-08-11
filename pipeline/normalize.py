@@ -41,6 +41,31 @@ WS = re.compile(r"[ \t]+")
 # Session codes are sponsor-group + number, e.g. GFGRG9 -> GFGRG.
 CODE_GROUP = re.compile(r"^([A-Za-z]+)")
 
+# Convenors put contact addresses in their session descriptions, and a few
+# people typed one into the affiliation field. Both end up in docs/data/, which
+# is a single file served to every visitor and cached on their device — so
+# publishing it republishes 21 academics' addresses as a bulk-scrapeable list.
+# They are public on the programme site in context; a JSON blob is not the same
+# thing, and this is a tool whose entire pitch is that it does not leak text.
+# The names stay: convenor names are public data (session_organisers), and
+# keeping "Merrill Hopper ([email removed])" tells a reader a contact exists and
+# the official session page — linked in the same block — is where to find it.
+EMAIL_SRC = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+EMAIL = re.compile(EMAIL_SRC)
+# In a label (an affiliation, rendered as if it were an institution name) a
+# "[email removed]" marker would read as nonsense in the institutions ranking,
+# so take the address and its lead-in out altogether and tidy the punctuation.
+AFF_EMAIL = re.compile(
+    r"[\s,;\-]*[\(\[]?\s*(?:e[\s\-]?mail(?:\s*id)?\s*[:\-]?\s*)?" + EMAIL_SRC + r"\s*[\)\]]?", re.I)
+
+
+def redact_prose(s: str) -> str:
+    return EMAIL.sub("[email removed]", s)
+
+
+def redact_label(s: str) -> str:
+    return re.sub(r"[\s,;:\-]+$", "", AFF_EMAIL.sub("", s)).strip()
+
 
 def strip_html(s: str | None) -> str:
     if not s:
@@ -77,7 +102,9 @@ def main() -> None:
                 p = sep.get("paper") or {}
                 if not p.get("title"):
                     continue
-                affs = sorted({a.get("identity_string", "") for a in p.get("paper_authors") or [] if a.get("identity_string")})
+                affs = sorted({redact_label(a.get("identity_string", ""))
+                               for a in p.get("paper_authors") or [] if a.get("identity_string")})
+                affs = [a for a in affs if a]
                 papers.append({"title": p["title"].strip(), "affiliations": affs})
             code = (se.get("code") or "").strip()
             group = (CODE_GROUP.match(code).group(1).upper() if code and CODE_GROUP.match(code) else "")
@@ -102,7 +129,7 @@ def main() -> None:
                 # "venue tbc" on 164 sessions whose room is perfectly well known.
                 "venue": ((rec.get("virtual_venue") or {}).get("name")
                           or (rec.get("virtual_stage") or {}).get("name") or ""),
-                "description": strip_html(se.get("description")),
+                "description": redact_prose(strip_html(se.get("description"))),
                 "papers": papers,
             })
     # Sort on immutable identity only. This used to include venue, which made

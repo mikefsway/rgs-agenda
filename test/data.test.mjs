@@ -83,6 +83,44 @@ ok("the programme covers four days", new Set(sessions.map((s) => s.day)).size ==
   [...new Set(sessions.map((s) => s.day))].sort().join(", "));
 ok("every session has a title", sessions.every((s) => s.title && s.title.trim()));
 
+// ---------- other people's contact details ----------
+
+/* docs/data/ is one file handed to every visitor and cached on their device, so
+ * an address that reaches it is republished as a scrapeable list rather than
+ * left in context on the programme site. 21 shipped before this check existed:
+ * 19 convenors writing "any questions, please contact: …" into a description,
+ * and 2 typed into the affiliation field, which app.js renders under the paper
+ * title as if it were an institution.
+ *
+ * Swept over the whole serialised file rather than field by field, because the
+ * two places it turned up were not the two places anyone would have listed —
+ * and a later field would be added without anyone thinking of this.
+ *
+ * The regex is deliberately NOT imported from pipeline/normalize.py: this
+ * asserts the property, so a redactor that stops working is caught rather than
+ * agreed with. A refresh re-runs the pipeline over new prose, which is exactly
+ * when this comes back. */
+
+heading("personal data");
+
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const inSessions = JSON.stringify(sessions).match(EMAIL) || [];
+const inFacets = JSON.stringify(facets).match(EMAIL) || [];
+ok("no email addresses in sessions.json", inSessions.length === 0,
+  `${new Set(inSessions).size} unique, e.g. ${inSessions.slice(0, 3).join(", ")} — re-run normalize.py and embed.py`);
+ok("no email addresses in facets.json", inFacets.length === 0,
+  `${new Set(inFacets).size} unique, e.g. ${inFacets.slice(0, 3).join(", ")}`);
+
+// Redaction that ate the surrounding sentence would be a different bug. The
+// marker belongs in prose, where it tells a reader a contact exists and the
+// linked official page is where to find it — and nowhere else, least of all in
+// an affiliation, which renders as an institution name.
+const marked = sessions.filter((s) => s.description.includes("[email removed]")).length;
+console.log(`  info  ${marked} session descriptions carry a redaction marker`);
+ok("no redaction marker leaked into a title or an affiliation",
+  sessions.every((s) => !/\[email/.test(s.title))
+  && sessions.every((s) => s.papers.every((p) => p.affiliations.every((a) => a && !/\[email/.test(a)))));
+
 // ---------- the admin filter ----------
 
 heading("admin filter (isAdminSession)");

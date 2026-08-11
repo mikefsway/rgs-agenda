@@ -1,3 +1,19 @@
 .playwright-mcp/
 __pycache__/
 *.pyc
+
+# The pipeline venv sits in the repo root and is ~1 GB with torch in it.
+# Untracked but unignored, it was one `git add -A` away from being committed.
+.venv-pipeline/
+.venv/
+
+# Machine-local Claude Code settings (paths, permissions). The skill under
+# .claude/skills/ IS meant to be shared — that's the porting entry point.
+.claude/settings.local.json
+
+# Raw API dumps: a build input, not a source file. fetch.py regenerates them,
+# normalize.py consumes them, nothing in docs/ reads them. Untracked on 12 Aug
+# 2026 because they are the API response verbatim, contact addresses and all,
+# and docs/data/ now redacts those — no reason to ship the unredacted copy
+# beside it. (They stay on disk; this only stops them being committed.)
+data/raw/
