@@ -1,6 +1,7 @@
 """Normalize raw Ex Ordo day dumps into docs/data/sessions.json.
 
-Fetching (July 2026 API behaviour — it has changed once already):
+Fetching is `pipeline/fetch.py`; the behaviour it encodes, and which has already
+changed once, is (July/August 2026):
   - day filter is `date=YYYY-MM-DD`; `day=`/`starts_at=` are silently ignored
   - `page_size` is clamped to 15 server-side (it used to honour 999), so loop
     `page=1..page_count` and concatenate the `data` arrays into one dump per day

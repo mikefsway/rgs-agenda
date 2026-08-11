@@ -20,14 +20,15 @@ data — so on conference wifi (or none) the page opens straight to your route.
 
 ```
 pipeline/            build-time, runs on any machine with Python
+  fetch.py           public Ex Ordo API -> data/raw/day_*.json
   normalize.py       raw Ex Ordo JSON -> docs/data/sessions.json
   embed.py           sessions -> facet embeddings (bge-small, float16)
 docs/                the static site (GitHub Pages serves this directory)
   index.html/app.js/style.css
   scholar.js             deterministic cleanup for pasted publication lists
   sw.js                  service worker: shell + data cached for offline use
-  data/sessions.json     621 sessions, 2,074 paper titles (1.7 MB)
-  data/embeddings.bin    3,198 facets x 384 dims, float16 (2.5 MB)
+  data/sessions.json     593 sessions, 2,217 paper titles (1.7 MB)
+  data/embeddings.bin    3,309 facets x 384 dims, float16 (2.5 MB)
   data/facets.json       row -> session mapping + evidence labels
 test/                node test/parse.test.mjs — no deps, no runner
   fixtures/            a real Scholar profile; keep it real (see CLAUDE.md)
@@ -86,7 +87,7 @@ fixed threshold badges everything or nothing.
 
 ### Agenda assembly
 
-- Sessions grouped into parallel timeslots (4 main blocks/day, ~45–53 options each).
+- Sessions grouped into parallel timeslots (4 main blocks/day, ~43–49 options each).
 - Top pick per slot with evidence, match bar, and the session's contents
   (description + paper list + link to the official Ex Ordo page, which routes
   on `eid`); next 3 as collapsible alternatives.
@@ -107,19 +108,23 @@ fixed threshold badges everything or nothing.
 
 ## Data provenance
 
-Programme fetched 16 July 2026 from the **public** Ex Ordo draft programme API
-(`event.ac2026.exordo.com/api/virtual_published_contents`, no auth). Paper
-abstracts are blanked in the public API; matching uses session descriptions and
-paper titles. Author names are not published there either — only presenting
-affiliations. Rooms were still placeholders ("In-person 10") at that fetch;
-re-run once real rooms land:
+Programme fetched 11 August 2026 from the **public** Ex Ordo programme API
+(`event.ac2026.exordo.com/api/virtual_published_contents`, no auth) — the final
+programme, which replaced the July draft's placeholder rooms ("In-person 10")
+with real ones and settled the running order: 103 draft sessions went,
+75 arrived, 518 stayed, and the paper count rose 2,074 → 2,217. Paper abstracts are
+blanked in the public API; matching uses session descriptions and paper titles.
+Author names are not published there either — only presenting affiliations.
+Re-run all three steps after any further programme change:
 
 ```
-# fetch (see pipeline/normalize.py header — the API's paging and expand
-# syntax changed once already; the working parameters are documented there)
-python3 pipeline/normalize.py
+python3 pipeline/fetch.py       # -> data/raw/day_YYYY-MM-DD.json (paged; see its header)
+python3 pipeline/normalize.py   # -> docs/data/sessions.json
 <venv-with-sentence-transformers>/bin/python pipeline/embed.py
 ```
+
+Then bump `CACHE` in `docs/sw.js`: the data files only make sense as a set, and
+stale-while-revalidate will otherwise refresh them on separate schedules.
 
 ## Roadmap
 
@@ -139,8 +144,8 @@ python3 pipeline/normalize.py
 - [ ] MCP server exposing the same catalogue+scores so agents can plan
   agendas (serve data, not prose).
 - [x] ICS export of the chosen route.
-- [x] Refresh data (done 16 July 2026 — two sessions merged away, a few papers
-  moved). Rooms are still placeholders; refresh again when they're real.
+- [x] Refresh data (final programme, 11 August 2026 — real rooms, 593 sessions).
+  Worth one more pass if the RGS publishes late changes before 1 September.
 - [ ] Generalise: any Ex Ordo-hosted conference is ingestible the same way.
 
 Not affiliated with the RGS-IBG. Times shown in Europe/London; always check the

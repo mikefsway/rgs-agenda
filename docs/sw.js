@@ -16,7 +16,9 @@
 // version bump is the only way to guarantee every cached file comes from the
 // same deploy — v1 refreshed each file on its own schedule, so a stale
 // embeddings.bin could sit beside a fresh facets.json indefinitely.
-const CACHE = "traverse-v2";
+// v3: the final programme (11 Aug 2026) changed all four data files at once —
+// exactly the case stale-while-revalidate gets wrong on its own.
+const CACHE = "traverse-v3";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

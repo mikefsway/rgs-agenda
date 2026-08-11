@@ -163,7 +163,7 @@ const EMB_DEVICE = "wasm-q8";
  * to their longest member — a backend can embed short bare titles correctly
  * and still garble prefixed or long-padded input, and fp16 numeric trouble is
  * more likely on longer sequences. So each probe runs twice — bare (exact
- * ground truth) and prefixed (the real path; measured self-rank #1 of 3198 at
+ * ground truth) and prefixed (the real path; measured self-rank #1 of 3309 at
  * ~0.90 cosine on wasm-q8) — and both batches carry a long filler text so the
  * padding matches what profile embedding produces. */
 const SELF_CHECK_FILLER =
@@ -728,9 +728,19 @@ function modeAllowed(mode, filter) {
 // Socials, receptions, placeholders and admin slots aren't content — any
 // semantic match against them is noise, so never present one as a
 // recommendation (they still appear as "closest is …" in weak slots).
-const ADMIN_TITLE = /\b(social|reception|drinks|welcome|placeholder|place ?holder|business meeting|agm|prize|awards)\b/i;
+const ADMIN_TITLE = /\b(reception|drinks|welcome|placeholder|place ?holder|business meeting|agm|prize|awards)\b/i;
+/* "Social" can't go in the list above: in this programme it is far more often a
+ * topic than an event ("Social Infrastructure and the Making of Just Places",
+ * "Social Movements, Protests and Anti-tourism Activism"). Papers usually save
+ * those, but a paperless session doesn't get that protection — the final
+ * programme's "Social and Cultural Geographies in Policy and Practice: A
+ * Practical Workshop" is a real workshop with a 1,767-char description that the
+ * bare word filtered out. It only reads as admin when it *names* the event:
+ * "…Evening Social", "…Lunchtime Social", "…Social Hour". */
+const SOCIAL_EVENT = /\bsocial\s*$|\bsocial\s+(hour|event|evening|night)\b/i;
 function isAdminSession(s) {
-  return s.papers.length === 0 && (s.description.length < 200 || ADMIN_TITLE.test(s.title));
+  if (s.papers.length > 0) return false;
+  return s.description.length < 200 || ADMIN_TITLE.test(s.title) || SOCIAL_EVENT.test(s.title);
 }
 
 const slotKey = (s) => `${s.day}|${s.start}`;
@@ -907,12 +917,25 @@ function exordoUrl(s) {
   return `${EXORDO_BASE}/session/${s.eid}/${slug}`;
 }
 
-/* Ex Ordo names 456 of the 623 rooms "In-person 10" and the like, so printing the
- * room and then the mode gives you "In-person 10 · in person" on most of the
- * programme. If the room name already says it, don't say it again. */
+/* Rooms were placeholders until the final programme: Ex Ordo named 456 of the
+ * 623 rooms "In-person 10" and the like, so printing the room and then the mode
+ * gave you "In-person 10 · in person". Real rooms landed on 11 Aug 2026 and the
+ * problem inverted — they're long, and 500+ of 593 end in the same six words
+ * ("… Room 407A, Imperial College London"), which is noise on a line that
+ * already carries the code, the mode and the paper count. Drop the host
+ * institution for display only; ICS keeps the full string, because a calendar
+ * entry is the one place you actually want the address. The mode guard stays:
+ * it costs a line and the placeholders could return for a future conference. */
+const VENUE_HOST = /,\s*Imperial College London\s*$/i;
+const VENUE_OFFSITE = /^(Offsite \d+)\s*-\s*SEE SESSION DETAILS.*$/i;
+function venueLabel(s) {
+  if (!s.venue) return "";
+  return s.venue.replace(VENUE_HOST, "").replace(VENUE_OFFSITE, "$1 — see session details").trim();
+}
+
 function metaBits(s) {
   const modeLabel = { "in-person": "in person", hybrid: "hybrid", online: "online", unspecified: "" }[s.mode];
-  const venue = s.venue || "venue tbc";
+  const venue = venueLabel(s) || "venue tbc";
   const venueSaysMode = modeLabel && venue.toLowerCase().replace(/-/g, " ").startsWith(modeLabel);
   const papers = s.papers.length
     ? `${s.papers.length} paper${s.papers.length === 1 ? "" : "s"}`
@@ -972,7 +995,7 @@ function slotHtml(slot, norm) {
   if (slot.weak) {
     return `<div class="slot" data-start="${slot.start}" data-end="${slot.end}"><div class="weak-slot">${time}
       Nothing here matches you well — nearest is <span class="pick-inline">${esc(slot.pick.session.title)}</span>
-      (${esc(slot.pick.session.venue || "venue tbc")}). Take the break.</div>${restore}</div>`;
+      (${esc(venueLabel(slot.pick.session) || "venue tbc")}). Take the break.</div>${restore}</div>`;
   }
   let body;
   if (slot.clashWith) {
@@ -1017,7 +1040,7 @@ function papersHtml(papers, routed) {
     return `<li>
       <div class="paper-title">${esc(p.label)}</div>
       <div class="paper-where mono">${dayName(p.session.day).split(",")[0]} ${t(p.session.start)} ·
-        ${esc(p.session.title)}${p.session.venue ? ` · ${esc(p.session.venue)}` : ""}</div>
+        ${esc(p.session.title)}${p.session.venue ? ` · ${esc(venueLabel(p.session))}` : ""}</div>
       ${quote}${flag}
     </li>`;
   }).join("");
@@ -1035,7 +1058,7 @@ function sessionLine(id) {
   if (!s) return "";
   return `<div class="mini-session">
     <span class="mini-title">${esc(s.title)}</span>
-    <span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(s.venue)}` : ""}</span>
+    <span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>
   </div>`;
 }
 
@@ -1089,7 +1112,7 @@ function lookupHtml(q) {
   return hits.map((s) => {
     const rank = rankOf.get(s.id);
     const r = rank ? STATE.results[rank - 1] : null;
-    const where = `<span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(s.venue)}` : ""}</span>`;
+    const where = `<span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>`;
     if (!r) {
       return `<div class="lookup-hit"><h4>${esc(s.title)}</h4>${where}
         <p class="hint">Outside your current day or attendance filters, so it wasn't ranked.</p></div>`;

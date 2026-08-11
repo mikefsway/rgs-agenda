@@ -236,20 +236,47 @@ lessons, the hard way, on the same user's machine:
 
 ## Data
 
-Programme comes from the public Ex Ordo API (no auth). Refreshed 16 July 2026;
-rooms were still "In-person N" placeholders then, so another refresh is due
-when real rooms land — see README. `pipeline/embed.py` needs a venv with
-sentence-transformers (`.venv-pipeline/` if it survived).
+Programme comes from the public Ex Ordo API (no auth). Refreshed to the **final
+programme on 11 Aug 2026**: 593 sessions, 2,217 papers, 3,309 facets, and real
+rooms at last ("Skempton Building Room 301, Imperial College London" in place of
+"In-person 10"). Against the July draft, 103 sessions went and 75 arrived, so a
+refresh is a much bigger event than the two-sessions-merged one in July — every
+saved route is invalidated by `dataSig`, which is the system working. Late
+changes before 1 September are still possible; re-run the three steps in the
+README and **bump `CACHE` in `docs/sw.js`**, or stale-while-revalidate will
+refresh the four data files on four different schedules. `pipeline/embed.py`
+needs a venv with sentence-transformers (`.venv-pipeline/` if it survived);
+embedding the full programme takes ~7.5 min on this Pi.
+
+Real room names arrived long and repetitive — 500+ of 593 end in ", Imperial
+College London" — so `venueLabel` strips the host institution for display and
+ICS keeps the full string, because a calendar entry is the one place the address
+earns its space.
+
+`isAdminSession` keeps socials and AGMs out of the recommendations, and the word
+it cannot use for that is **"social"** — in a geography programme it is far more
+often a topic ("Social Infrastructure and the Making of Just Places", "Social
+Movements, Protests and Anti-tourism Activism"). Papers normally protect those,
+but a paperless session has no such cover, and the final programme's "Social and
+Cultural Geographies in Policy and Practice: A Practical Workshop" — a real
+workshop with a 1,767-char description — was filtered out of the entire agenda by
+the bare word. It only reads as admin when it *names* the event ("…Evening
+Social", "…Social Hour"), which is what `SOCIAL_EVENT` matches. The failure is
+invisible from the outside: an excluded session doesn't look wrong, it just
+never appears, so check the filter's output against the new data after a
+refresh rather than waiting for someone to notice an absence.
 
 The API has changed shape once already (page_size now clamped to 15, `date=`
 is the only working day filter, `expand[]=` 500s — dotted comma-separated
-paths work). The working fetch loop is documented in `pipeline/normalize.py`'s
-header; trust it over memory.
+paths work). That loop is now `pipeline/fetch.py` rather than prose in a
+docstring; trust it over memory. It hard-fails when a day's row count doesn't
+match the API's own `count`, because a silently short read is indistinguishable
+from a programme that genuinely shrank.
 
 Two id systems: `sessions[].id` is the virtual_published_content id (stable
 row identity, used for localStorage joins); `sessions[].eid` is the
 schedule_event id, which is what the public site routes on
-(`/session/<eid>/<slug>`). They differ for 606 of 621 sessions — linking on
+(`/session/<eid>/<slug>`). They differ for 579 of 593 sessions — linking on
 `id` gives you someone else's session. The public API publishes **no author
 names**, only presenting affiliations — hence the People tab is institutions
 and research groups, and says so.
