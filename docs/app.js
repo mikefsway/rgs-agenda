@@ -574,6 +574,15 @@ function topPapers(facets, facetScore, sessions, allowed, sources) {
 const TOP_INSTITUTIONS = 12;
 const TOP_GROUPS = 8;
 
+/* Affiliations are free text typed by 2,217 separate submitters, so the same
+ * institution arrives spelled several ways: "University of Cape Town" and
+ * "University of Cape town" listed as two entries, "Royal Holloway University
+ * of London" ranked below "Royal Holloway, University of London" because its
+ * papers were split across both. Group on a punctuation- and case-free key and
+ * show whichever spelling was used most. 11 collisions in the final programme. */
+const affKey = (a) => a.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9']+/g, " ").trim();
+const commonest = (counts) => [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+
 function buildPeople(results, facets, facetScore, sessions, allowed) {
   const paperF = [];
   for (let f = 0; f < facets.length; f++) {
@@ -592,8 +601,10 @@ function buildPeople(results, facets, facetScore, sessions, allowed) {
     seenPaper.add(key);
     const paper = sessions[pf.si].papers.find((p) => p.title === pf.label);
     for (const aff of paper?.affiliations || []) {
-      let rec = inst.get(aff);
-      if (!rec) inst.set(aff, rec = { name: aff, strong: 0, best: pf.score, papers: [] });
+      const akey = affKey(aff);
+      let rec = inst.get(akey);
+      if (!rec) inst.set(akey, rec = { names: new Map(), strong: 0, best: pf.score, papers: [] });
+      rec.names.set(aff, (rec.names.get(aff) || 0) + 1);
       if (pf.score >= strong) rec.strong++;
       if (rec.papers.length < 3) rec.papers.push({ label: pf.label, id: sessions[pf.si].id });
     }
@@ -602,7 +613,7 @@ function buildPeople(results, facets, facetScore, sessions, allowed) {
     .filter((r) => r.strong > 0)
     .sort((a, b) => b.strong - a.strong || b.best - a.best)
     .slice(0, TOP_INSTITUTIONS)
-    .map(({ name, strong, papers }) => ({ name, strong, papers }));
+    .map(({ names, strong, papers }) => ({ name: commonest(names), strong, papers }));
 
   const groups = new Map();
   for (const r of results) {
@@ -913,6 +924,10 @@ const fmtDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric
 const fmtStamp = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 const t = (iso) => fmtTime.format(new Date(iso));
 const dayName = (d) => fmtDay.format(new Date(d + "T12:00:00Z"));
+// Inside a running line — a paper's "where", a day tab — the long form eats
+// the line: "Thursday 3 September 11:10" says nothing "Thu 3 Sept 11:10" doesn't.
+const fmtDayShort = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" });
+const dayShort = (d) => fmtDayShort.format(new Date(d + "T12:00:00Z"));
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function evidenceHtml(ev) {
@@ -999,12 +1014,22 @@ function controlsHtml(r, slot, role) {
   return `<button type="button" class="mini" data-act="dismiss" data-id="${id}" data-slot="${esc(slot.key)}">Not this one</button>`;
 }
 
+/* The highlighter says "this is the one you're going to". A pinned pick gets the
+ * full mark, the tool's own suggestion a thin stroke — the difference between a
+ * decision and a recommendation. Alternatives and both halves of an undecided
+ * clash get nothing, because nothing has been decided in them yet. */
+function markClass({ clash, slot, role }) {
+  if (clash || role !== "pick" || !slot) return "";
+  return slot.pinned ? "mark" : "mark-soft";
+}
+
 function pickHtml(r, norm, { clash = false, slot = null, role = "pick" } = {}) {
   const s = r.session;
   const controls = slot ? `<div class="pick-controls">${controlsHtml(r, slot, role)}</div>` : "";
-  return `<article class="pick${clash ? " clash-a" : ""}">
-    ${r.dual ? `<span class="dual-flag">matches your work and your aims</span>` : ""}
-    <h4>${esc(s.title)}</h4>
+  const cls = markClass({ clash, slot, role });
+  return `<article class="pick">
+    ${r.dual ? `<span class="tagline">matches your work and your aims</span>` : ""}
+    <h4><span class="${cls}">${esc(s.title)}</span></h4>
     <span class="meta mono">${metaBits(s).map(esc).join(" · ")}</span>
     <div class="match-bar" role="img" aria-label="match strength ${Math.round(norm(r.score) * 100)} of 100"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
     ${evidenceHtml(r.evidence)}
@@ -1013,21 +1038,26 @@ function pickHtml(r, norm, { clash = false, slot = null, role = "pick" } = {}) {
   </article>`;
 }
 
+/* Times sit in a gutter down the left, so the route reads the way a timetable
+ * does — eye down the clock, not down a list of cards. */
 function slotHtml(slot, norm) {
-  const time = `<div class="slot-time mono">${t(slot.start)}–${t(slot.end)} · ${slot.parallel} parallel option${slot.parallel === 1 ? "" : "s"}</div>`;
+  const when = `<div class="slot-when"><b>${t(slot.start)}</b>${t(slot.end)}
+    <span class="parallel">${slot.parallel} parallel</span></div>`;
   const restore = slot.hidden
     ? `<div class="hidden-note">${slot.hidden} hidden
         <button type="button" class="mini" data-act="restore" data-slot="${esc(slot.key)}">restore</button></div>`
     : "";
+  const wrap = (inner) =>
+    `<div class="slot" data-start="${slot.start}" data-end="${slot.end}">${when}<div class="slot-body">${inner}</div></div>`;
+
   if (slot.weak) {
-    return `<div class="slot" data-start="${slot.start}" data-end="${slot.end}"><div class="weak-slot">${time}
-      Nothing here matches you well — nearest is <span class="pick-inline">${esc(slot.pick.session.title)}</span>
-      (${esc(venueLabel(slot.pick.session) || "venue tbc")}). Take the break.</div>${restore}</div>`;
+    return wrap(`<div class="weak-slot">Nothing here matches you well — nearest is
+      <span class="pick-inline">${esc(slot.pick.session.title)}</span>
+      (${esc(venueLabel(slot.pick.session) || "venue tbc")}). Take the break.</div>${restore}`);
   }
   let body;
   if (slot.clashWith) {
-    body = `<span class="clash-flag">Close call</span>
-      <p class="clash-note">These two are effectively tied for you. Read both, pick one:</p>
+    body = `<p class="clash-note">Close call — these two are effectively tied for you. Read both, pick one:</p>
       <div class="fork">
         ${pickHtml(slot.pick, norm, { clash: true, slot, role: "clash" })}
         ${pickHtml(slot.clashWith, norm, { clash: true, slot, role: "clash" })}
@@ -1039,7 +1069,7 @@ function slotHtml(slot, norm) {
     ? `<details class="alts"><summary>Also in this slot (${slot.alternatives.length})</summary>
         ${slot.alternatives.map((a) => pickHtml(a, norm, { slot, role: "alt" })).join("")}</details>`
     : "";
-  return `<div class="slot" data-start="${slot.start}" data-end="${slot.end}">${time}${body}${alts}${restore}</div>`;
+  return wrap(`${body}${alts}${restore}`);
 }
 
 /* Which sessions the route is actually sending you to — picks and both halves of a
@@ -1066,7 +1096,7 @@ function papersHtml(papers, routed) {
       : `<span class="paper-flag catch">worth catching</span>`;
     return `<li>
       <div class="paper-title">${esc(p.label)}</div>
-      <div class="paper-where mono">${dayName(p.session.day).split(",")[0]} ${t(p.session.start)} ·
+      <div class="paper-where"><span class="mono">${dayShort(p.session.day)} ${t(p.session.start)}</span> ·
         ${esc(p.session.title)}${p.session.venue ? ` · ${esc(venueLabel(p.session))}` : ""}</div>
       ${quote}${flag}
     </li>`;
@@ -1085,7 +1115,7 @@ function sessionLine(id) {
   if (!s) return "";
   return `<div class="mini-session">
     <span class="mini-title">${esc(s.title)}</span>
-    <span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>
+    <span class="mono">${dayShort(s.day)} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>
   </div>`;
 }
 
@@ -1102,7 +1132,7 @@ function peopleHtml(people) {
               <span class="mono">${r.strong} close paper${r.strong === 1 ? "" : "s"}</span></div>
             <ul class="inst-papers">${r.papers.map((p) => {
               const s = DATA.byId.get(p.id);
-              return `<li>${esc(p.label)}${s ? ` <span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}</span>` : ""}</li>`;
+              return `<li>${esc(p.label)}${s ? ` <span class="mono">${dayShort(s.day)} ${t(s.start)}</span>` : ""}</li>`;
             }).join("")}</ul>
           </li>`).join("")}</ol>
       </div>`
@@ -1111,8 +1141,7 @@ function peopleHtml(people) {
     ? `<div class="people-card">
         <h3>Research groups convening your kind of sessions</h3>
         <p class="hint">RGS-IBG research groups sponsoring the sessions that score highest for
-        you. Their sessions and socials are where you'll keep bumping into the same people —
-        which is rather the point.</p>
+        you. Their sessions and socials are a good bet for meeting the same people twice.</p>
         <ol class="group-list">${people.groups.map((g) => `
           <li>
             <div class="inst-head"><strong>${esc(g.name)}</strong>
@@ -1139,7 +1168,7 @@ function lookupHtml(q) {
   return hits.map((s) => {
     const rank = rankOf.get(s.id);
     const r = rank ? STATE.results[rank - 1] : null;
-    const where = `<span class="mono">${dayName(s.day).split(",")[0]} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>`;
+    const where = `<span class="mono">${dayShort(s.day)} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>`;
     if (!r) {
       return `<div class="lookup-hit"><h4>${esc(s.title)}</h4>${where}
         <p class="hint">Outside your current day or attendance filters, so it wasn't ranked.</p></div>`;
@@ -1235,11 +1264,13 @@ function markNowNext() {
   let target = null;
   for (const el of document.querySelectorAll("#route .slot")) {
     const start = Date.parse(el.dataset.start), end = Date.parse(el.dataset.end);
+    // into .slot-body, not .slot — .slot is the time-gutter grid, and a chip
+    // dropped straight into it becomes a third column.
     const chip = (cls, text) => {
       const span = document.createElement("span");
       span.className = cls;
       span.textContent = text;
-      el.prepend(span);
+      (el.querySelector(".slot-body") || el).prepend(span);
     };
     if (start <= now && now < end) {
       el.classList.add("slot-now");
@@ -1264,7 +1295,8 @@ function renderOverview() {
     : "";
   $("#overview").innerHTML = `<div class="overview-card">
     <h3>If you only make five sessions</h3>
-    ${top5.map((r) => `<div>• ${esc(r.session.title)} <span class="mono">(${dayName(r.session.day).split(",")[0]} ${t(r.session.start)})</span></div>`).join("")}
+    <ol>${top5.map((r) => `<li>${esc(r.session.title)}
+      <span class="mono">${dayShort(r.session.day)} ${t(r.session.start)}</span></li>`).join("")}</ol>
     ${nudge}
   </div>`;
 }
@@ -1275,7 +1307,7 @@ function renderRoute() {
   const { days, norm } = agenda;
 
   $("#day-tabs").innerHTML = [...days.keys()].map((d) =>
-    `<button type="button" data-day="${d}" aria-selected="false">${dayName(d)}</button>`).join("");
+    `<button type="button" data-day="${d}" aria-selected="false">${dayShort(d)}</button>`).join("");
   $("#route").innerHTML = [...days.entries()].map(([day, slots]) => `
     <section class="day-block" id="day-${day}">
       <h3 class="day-heading">${dayName(day)}</h3>

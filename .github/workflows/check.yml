@@ -1,0 +1,43 @@
+# Two jobs, deliberately separate.
+#
+# `tests` runs on every push and guards the repo: the Scholar parser, and the
+# data files against each other. It is the gate on a pipeline run.
+#
+# `monitor` runs on a schedule and watches the deployed site and the things it
+# depends on that nobody here controls — jsDelivr, Hugging Face, and the Ex Ordo
+# programme. It fails loudly rather than quietly, because a failing scheduled
+# workflow is the notification: GitHub emails the repo owner.
+
+name: check
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # 07:12 UTC daily. Not on the hour: GitHub queues everyone who asked for
+    # :00 together, and a monitor that runs late is a monitor you stop trusting.
+    - cron: "12 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node test/parse.test.mjs
+      - run: node test/data.test.mjs
+
+  monitor:
+    # Only on a schedule or by hand: on a push the site hasn't deployed yet, so
+    # it would check the previous version and report on the wrong thing.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node test/monitor.mjs https://mikefsway.github.io/rgs-agenda/

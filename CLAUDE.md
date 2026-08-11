@@ -73,6 +73,37 @@ goalsHit >= p97` reads like "top 3%", but the two ranks are only loosely
 correlated, so the joint event is nearer 0.1% and it fired on 0 of 623 sessions.
 Threshold the *min* of the two ranks, not each independently.
 
+## The look — restraint is the brief, not an absence of one
+
+Redesigned 11 Aug 2026 because the previous version "looked AI-coded, in some
+ways because it was too sophisticated" — and it was: a fully worked Ordnance
+Survey conceit (graticule grid behind the whole page, `SHEET AC2026`, a
+coordinates line, Landranger magenta, waypoint dots, a dashed route line),
+uppercase Archivo at width 122 / weight 780, three type families, and a mono
+uppercase chip on every flag. All of it internally consistent, none of it
+information. A person building a tool for themselves does not invent a sheet
+number for their web page.
+
+What replaced it is deliberately plainer, and the plainness has rules:
+
+- **Yellow means "this is the one."** Full highlighter on a pinned pick, pale on
+  the tool's own suggestion, none on either half of an undecided clash, plus the
+  current tab and the wordmark. It is the only colour besides ink and link blue,
+  and its meaning is the reason it is legible. Adding a second yellow thing that
+  doesn't mean "chosen" is what will break this.
+- **Times live in a gutter** (`.slot` is a two-column grid). The route is a
+  timetable; the sequence is real information, so it gets structure. The old
+  dashed route line with circular waypoints encoded nothing the times don't.
+- Sentence case everywhere. IBM Plex Sans + Plex Mono, one superfamily. Mono is
+  for things that are scanned rather than read — times, codes, counts — and a
+  long session title set in mono is a wall, which is why `.paper-where` puts
+  only the time in it.
+- 3px radii, hairline rules, no page-wide background pattern, no entrance
+  animations. The one animation left is the working pulse, which is status.
+
+If a change here starts adding a metaphor, ask whether the metaphor carries
+information. The gutter does. A coordinates line does not.
+
 ## Sessions vs papers — the aggregate is lossy on purpose
 
 A session scores `0.75 * best facet + 0.25 * mean(top 3)`, so depth beats a lone
@@ -87,6 +118,39 @@ Don't fix that in the aggregate; it isn't broken, and no reweighting reaches it
 anyway (the winning session led on the best-facet term too). `topPapers` reports
 underneath the aggregate instead, and the "worth catching" flag is exactly the
 case where the paper is close but its session isn't.
+
+## Checks — what each one is actually for
+
+```
+node test/parse.test.mjs    # the Scholar parser
+node test/data.test.mjs     # the shipped data against itself; run after every pipeline run
+node test/monitor.mjs       # the deployed site + jsDelivr + Hugging Face + Ex Ordo
+```
+
+`data.test.mjs` exists because every invariant in this file describes a failure
+with no symptom, and prose in a working-notes file does not fire. It re-derives
+`order_sig`, checks the four data files agree, and — the part worth
+understanding — checks the socials filter by pulling `ADMIN_TITLE` and
+`SOCIAL_EVENT` **out of `docs/app.js` by regex** rather than restating them. A
+copy would have gone on passing while the shipped filter rotted. The assertion
+it makes is deliberately independent of the title heuristic: nothing outside
+`type: general_session_with_manual_content`, and nothing with papers, may be
+excluded. Description length is no use as a signal — the socials have long
+descriptions too ("Geographies of Children, Youth and Families Evening Social",
+1,027 characters). Both regressions it guards were replayed against it and it
+fails on both.
+
+That filter is still a title heuristic over a field nobody validates. `type` is
+the stronger signal — all 23 exclusions in the final programme are paperless
+`general_session_with_manual_content` — but switching to it is a behaviour
+change that would also start excluding three sessions the regex currently keeps,
+so it hasn't been made.
+
+`monitor.mjs` watches what this repo can't fix: a half-deployed Pages build (the
+four data files are only meaningful as a set), jsDelivr or Hugging Face going
+away, or the programme moving. It runs daily in Actions, where the failing
+workflow *is* the notification. Point it at localhost to check a build before
+pushing.
 
 ## Verifying a scoring change
 

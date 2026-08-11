@@ -22,7 +22,10 @@
 // than virtual_venue. Mandatory rather than cosmetic: sessions.json was
 // reordered, so a cached embeddings.bin beside the new sessions.json now trips
 // the order_sig check and refuses to load at all.
-const CACHE = "traverse-v4";
+// v5: the redesign. index.html, style.css and app.js changed together — the
+// markup and the stylesheet have to arrive from the same deploy or the route
+// renders unstyled against a grid that no longer exists.
+const CACHE = "traverse-v5";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

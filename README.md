@@ -8,8 +8,9 @@ and genuine clashes surfaced rather than silently resolved.
 **Privacy model: everything runs in the browser.** The programme ships as
 precomputed embeddings; the user's text is embedded locally with
 [transformers.js](https://huggingface.co/docs/transformers.js) (bge-small,
-~30 MB, cached after first visit; WebGPU where available, wasm otherwise) and
-never leaves the device. No account, no tracking, no server. The profile is
+~30 MB, cached after first visit; wasm-q8, the only backend — the WebGPU fast
+path was removed in July 2026 after it returned finite garbage on the one real
+GPU it met) and never leaves the device. No account, no tracking, no server. The profile is
 stored in `localStorage` as a fraglet-shaped JSON (`{title, brief, detail,
 category, domain, tags, visibility: "private"}`) and can be downloaded; see
 [fraglet.org](https://fraglet.org). The computed route and the profile's
@@ -30,8 +31,12 @@ docs/                the static site (GitHub Pages serves this directory)
   data/sessions.json     593 sessions, 2,217 paper titles (1.7 MB)
   data/embeddings.bin    3,309 facets x 384 dims, float16 (2.5 MB)
   data/facets.json       row -> session mapping + evidence labels
-test/                node test/parse.test.mjs — no deps, no runner
+test/                no deps, no runner — plain node scripts
+  parse.test.mjs       the Scholar parser against a real 68-article profile
+  data.test.mjs        the shipped data files against each other
+  monitor.mjs          the deployed site and what it depends on
   fixtures/            a real Scholar profile; keep it real (see CLAUDE.md)
+.github/workflows/   tests on push; monitor daily
 data/raw/            fetched Ex Ordo day dumps (gitignored candidates; kept for reproducibility)
 ```
 
@@ -137,6 +142,37 @@ via `order_sig` rather than quietly scoring against the wrong sessions.
 
 Then bump `CACHE` in `docs/sw.js`: the data files only make sense as a set, and
 stale-while-revalidate will otherwise refresh them on separate schedules.
+
+## Checks
+
+```
+node test/parse.test.mjs    # the Scholar parser
+node test/data.test.mjs     # the shipped data files against each other
+node test/monitor.mjs       # the live site + jsDelivr + Hugging Face + Ex Ordo
+```
+
+`data.test.mjs` is the gate on a pipeline run. It catches the failures that have
+no symptom: a `sessions.json` reordered out of step with the matrix, a session
+with no room, a real workshop caught by the socials filter. It reads the filter
+regexes out of `docs/app.js` rather than restating them, so tightening the
+filter is tested rather than shadowed by a stale copy. Both regressions it
+guards against are real ones from this repo's history, and it has been checked
+to fail on them.
+
+`monitor.mjs` looks outward instead: a half-deployed Pages build, jsDelivr or
+Hugging Face going away (the ~30 MB model is fetched at first visit and nothing
+works without it), or the Ex Ordo programme moving under the shipped copy. It
+runs daily in Actions, where a failing scheduled workflow is the notification.
+
+## Design
+
+One rule holds the interface together: **yellow means "this is the one"** — the
+pick you're going to, the tab you're on. A pinned pick gets the full
+highlighter, the tool's own suggestion a paler one, and an undecided clash gets
+neither, because nothing has been decided in it yet. Times run down a gutter on
+the left, because a route through a conference is a timetable and a timetable is
+read by running your eye down the clock. Everything else is ink on paper: IBM
+Plex Sans and Mono, hairline rules, no other colour.
 
 ## Roadmap
 

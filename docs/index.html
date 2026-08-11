@@ -7,27 +7,29 @@
 <meta name="description" content="Paste your research interests and goals; get a personalised route through the sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs entirely in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23b0006d' stroke-width='14'/><circle cx='50' cy='50' r='9' fill='%23b0006d'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23fbfbf9'/><rect x='5' y='8' width='22' height='3' fill='%2317191a'/><rect x='4' y='15' width='24' height='8' fill='%23ffe066'/><rect x='5' y='17' width='16' height='3' fill='%2317191a'/></svg>">
 </head>
 <body>
 
-<header class="masthead">
-  <div class="sheet-label">
-    <span class="mono">SHEET AC2026</span>
-    <span class="mono">LONDON · 51°30′N 0°10′W</span>
+<header class="topbar">
+  <div class="wrap">
+    <p class="wordmark"><span class="mark">traverse</span> <span class="dot">·</span> rgs-ibg 2026</p>
+    <span class="mono">1–4 September, London</span>
   </div>
-  <h1>Traverse</h1>
-  <p class="standfirst">A personalised route through the <strong><span id="n-sessions">600+</span> sessions</strong> of the
-  RGS-IBG Annual International Conference, 1–4 September 2026.</p>
-  <p class="privacy-note">Everything runs in your browser. What you type or paste is matched locally
-  against the public programme and <strong>never leaves this device</strong>.</p>
 </header>
 
+<div class="intro wrap">
+  <p class="lede">Paste what you work on and get a timetable for the RGS-IBG Annual
+  International Conference, picked out of all <span id="n-sessions">600+</span> sessions.</p>
+  <p class="privacy-note">It runs in your browser. What you paste is matched on this device
+  against the public programme and never uploaded.</p>
+</div>
+
 <main>
-<section class="panel" id="profile-panel" aria-labelledby="profile-h">
-  <h2 id="profile-h"><span class="waypoint-dot" aria-hidden="true"></span>Your interests and goals</h2>
+<section class="panel wrap" id="profile-panel" aria-labelledby="profile-h">
+  <h2 id="profile-h">Your interests and goals</h2>
   <p class="hint">Fill in either box, ideally both. Sessions that match your past work
   <em>and</em> your current plans rise to the top.</p>
 
@@ -54,7 +56,7 @@
       <label><input type="checkbox" name="day" value="2026-09-04" checked> Fri 4</label>
     </fieldset>
     <fieldset>
-      <legend>Attendance</legend>
+      <legend>Attending</legend>
       <label><input type="radio" name="mode" value="any" checked> Any</label>
       <label><input type="radio" name="mode" value="inperson"> In person</label>
       <label><input type="radio" name="mode" value="online"> Online / hybrid</label>
@@ -63,7 +65,7 @@
 
   <div class="actions">
     <button id="plan-btn" class="primary" type="button">Chart my route</button>
-    <span id="status" class="mono" role="status" aria-live="polite"></span>
+    <span id="status" role="status" aria-live="polite"></span>
   </div>
   <div class="fraglet-row">
     <button id="save-fraglet" class="ghost" type="button" hidden>Download profile (fraglet JSON)</button>
@@ -72,7 +74,7 @@
   </div>
 </section>
 
-<section id="results" hidden aria-labelledby="results-h">
+<section id="results" class="wrap" hidden aria-labelledby="results-h">
   <h2 id="results-h" class="visually-hidden">Your route</h2>
   <p id="restored-note" class="restored-note mono" hidden></p>
   <div id="overview"></div>
@@ -113,10 +115,12 @@
 </main>
 
 <footer>
-  <p>Built from the <a href="https://event.ac2026.exordo.com/" rel="noopener">public programme</a>
-  (fetched 11 August 2026 — check final times on Ex Ordo). Not affiliated with the RGS-IBG.
-  Semantic matching gets things wrong; treat this as a first draft of your diary.</p>
-  <p class="mono">open source · no tracking · no account · works offline once loaded</p>
+  <div class="wrap">
+    <p>Built from the <a href="https://event.ac2026.exordo.com/" rel="noopener">public programme</a>
+    (fetched 11 August 2026 — check final times on Ex Ordo). Not affiliated with the RGS-IBG.
+    Semantic matching gets things wrong; treat this as a first draft of your diary.</p>
+    <p class="mono">no tracking · no account · works offline once loaded</p>
+  </div>
 </footer>
 
 <script type="module" src="app.js"></script>
