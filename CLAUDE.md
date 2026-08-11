@@ -366,6 +366,47 @@ Two rules follow. A data-only change can still invalidate the matrix, so
 text. And when adding a field, ask whether it feeds the sort before you ask how
 it renders.
 
+## Porting it out — PORTING.md is the copy that leaves
+
+`PORTING.md` is the instruction set for pointing all of this at a different
+conference, `.claude/skills/port-navigator/` makes it a skill in a clone, and
+`docs/build.html` writes a filled-in prompt from a pasted programme URL.
+
+**The prompt must keep deferring to `PORTING.md`, not restate it.** A prompt is
+copied and frozen at the moment someone pastes it; a file in the repo is not.
+The generated text says so in as many words ("where they disagree, PORTING.md
+wins") and the summary in it is deliberately shorter than the file. The failure
+mode is two instruction sets drifting apart, with the stale one being the one
+people actually run.
+
+Which means the invariants above now live in two places at two lengths: this
+file is the account with the numbers in it, `PORTING.md` §6 is the one-line-each
+version. **When one of them changes, change both.** A port inheriting a relaxed
+rule is the whole risk of publishing this at all — the reason the rules are
+worth handing on is that every one of them fails silently.
+
+`docs/build.js` makes no network call and must not start. A pasted programme URL
+would be CORS-blocked anyway, so the only thing a fetch would add is a page that
+looks like it phones home on a site whose pitch is that it doesn't.
+
+**`build.html`/`build.js` are deliberately not in `sw.js`'s `SHELL`.** The point
+of that cache is a route that opens in a seminar room with no signal; nobody
+needs the porting page offline, and every entry in `SHELL` is re-fetched with
+`cache: "reload"` on each version bump. Same-origin stale-while-revalidate
+picks both files up on first request anyway. `monitor.mjs` checks them instead,
+since they are the two files the service worker won't be holding a copy of.
+
+They shipped alongside the v6 bump, but that bump is the redaction's, not
+theirs — on their own they would not have earned one, because the worst a split
+deploy of `index.html` + `style.css` gives here is one unstyled paragraph,
+nothing like the v5 case where the grid and the markup had to arrive as a pair.
+
+`LICENSE` is MIT. The footer credit is a **request**, not a condition — stated
+that way in `LICENSE`, `PORTING.md` §8 and on `build.html`. Someone stripping it
+is within their rights. Adding an attribution clause later would make the repo
+non-standard in a way institutions notice, which costs more clones than the
+clause recovers.
+
 ## Data
 
 Programme comes from the public Ex Ordo API (no auth). Refreshed to the **final
@@ -397,6 +438,32 @@ Social", "…Social Hour"), which is what `SOCIAL_EVENT` matches. The failure is
 invisible from the outside: an excluded session doesn't look wrong, it just
 never appears, so check the filter's output against the new data after a
 refresh rather than waiting for someone to notice an absence.
+
+**The programme carries other people's contact details, and `docs/data/` is the
+wrong place for them.** Found 12 Aug 2026, live on the site: 21 personal email
+addresses — 19 in convenors' session descriptions ("if you have any questions,
+please contact: …") and 2 that someone had typed into the affiliation field,
+which `app.js` renders under the paper title as if it were an institution. All
+of them are public on the Ex Ordo programme, in context, on a page a human
+navigated to. `sessions.json` is a single 1.7 MB file served to every visitor
+and cached on their device, which is a different thing: it turns twenty
+academics' addresses into a bulk-scrapeable list, on a tool whose whole pitch is
+that text doesn't leak.
+
+`normalize.py` redacts now — `[email removed]` in prose, and stripped outright
+from affiliations, where a marker would read as an institution name. Names stay:
+convenor names are public data anyway, and "Merrill Hopper ([email removed])"
+tells a reader a contact exists and that the official session page, linked in
+the same block, is where to find it.
+
+The point is that **this recurs on every refresh** and looks like nothing. Four
+assertions in `data.test.mjs` are the actual fix; the regex in `normalize.py` is
+just what makes them pass. Extending this to phone numbers would be reasonable —
+none in the current programme, checked — but note that postcodes are venue
+addresses and URLs are mostly DOIs and call-for-paper forms, so neither should
+be swept up by the same brush. And `data/raw/` is untracked as of the same date:
+it is the API response verbatim, so it holds the unredacted originals, and it is
+a build input that `fetch.py` regenerates.
 
 The API has changed shape once already (page_size now clamped to 15, `date=`
 is the only working day filter, `expand[]=` 500s — dotted comma-separated

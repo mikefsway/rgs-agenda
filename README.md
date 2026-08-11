@@ -26,6 +26,7 @@ pipeline/            build-time, runs on any machine with Python
   embed.py           sessions -> facet embeddings (bge-small, float16)
 docs/                the static site (GitHub Pages serves this directory)
   index.html/app.js/style.css
+  build.html/build.js    "build one for your conference" — writes a porting prompt
   scholar.js             deterministic cleanup for pasted publication lists
   sw.js                  service worker: shell + data cached for offline use
   data/sessions.json     593 sessions, 2,217 paper titles (1.7 MB)
@@ -37,7 +38,10 @@ test/                no deps, no runner — plain node scripts
   monitor.mjs          the deployed site and what it depends on
   fixtures/            a real Scholar profile; keep it real (see CLAUDE.md)
 .github/workflows/   tests on push; monitor daily
-data/raw/            fetched Ex Ordo day dumps (gitignored candidates; kept for reproducibility)
+data/raw/            fetched Ex Ordo day dumps — gitignored: a build input, and
+                     the API response verbatim, contact addresses and all
+PORTING.md           how to point all of the above at a different conference
+.claude/skills/      port-navigator — the same, as a Claude Code skill
 ```
 
 No build step: `docs/` is plain ES modules, served as-is.
@@ -124,7 +128,11 @@ with real ones and settled the running order: 103 draft sessions went,
 blanked in the public API; matching uses session descriptions and paper titles.
 **Paper author names are withheld** — `paper_authors` carries only a presenting
 affiliation, and asking the API to expand the user behind it makes it drop the
-author rows altogether. Convenor and chair names *are* public (747 people across
+author rows altogether. Email addresses that convenors put in their session
+descriptions are redacted to `[email removed]` by `normalize.py`, and stripped
+from affiliations entirely: they are public on the programme site in context,
+but `sessions.json` is one file served to every visitor, which would turn them
+into a scrapeable list. `data.test.mjs` fails if any get through. Convenor and chair names *are* public (747 people across
 539 sessions, via `session_organisers`), so naming convenors remains possible
 if the tab ever wants people in it; see CLAUDE.md.
 Re-run all three steps after any further programme change:
@@ -164,6 +172,29 @@ Hugging Face going away (the ~30 MB model is fetched at first visit and nothing
 works without it), or the Ex Ordo programme moving under the shipped copy. It
 runs daily in Actions, where a failing scheduled workflow is the notification.
 
+## Porting it to another conference
+
+Almost none of this is about RGS-IBG. The matching, the agenda assembly, the
+clash rule, the Scholar parser and the offline caching are conference-agnostic;
+what is specific is one data adapter and about a dozen constants.
+[`PORTING.md`](PORTING.md) is the list, written for a coding agent and readable
+by a person, and `.claude/skills/port-navigator/` makes it a skill in a clone.
+
+`docs/build.html` is the front door: paste a programme URL and it writes the
+prompt, filled in with the conference details and what's known about getting a
+programme out of that platform. It makes no network call — the URL is
+pattern-matched in the browser and the prompt tells the agent to probe rather
+than trust the guess.
+
+The real content of `PORTING.md` is the failure list. The scoring rules that
+must not be relaxed, the sort key that must not contain a display field, the
+socials filter that has to be re-checked against every new programme — each one
+is something that broke here first, and all of them break silently. That is
+what a port is actually inheriting.
+
+MIT licensed. Credit in the footer of a deployed copy is asked for rather than
+required; improvements back as a pull request are worth more.
+
 ## Editing the copy
 
 ```
@@ -171,9 +202,9 @@ node tools/copyedit.mjs                       # on the machine holding the repo
 ssh -L 7000:localhost:7000 <that machine>     # from anywhere else
 ```
 
-Then open `http://localhost:7000`: one box per piece of copy — 43 of them in
-`docs/index.html`, including the page title, meta description, placeholders and
-aria-labels. Save writes the file back with everything else untouched, keeping
+Then open `http://localhost:7000`: one box per piece of copy — 45 of them in
+`docs/index.html` and 29 in `docs/build.html`, including page titles, meta
+descriptions, placeholders and aria-labels. Save writes the file back with everything else untouched, keeping
 the hand-wrapping. Publish runs the tests, commits and pushes.
 
 It won't let you delete an element `app.js` looks up by id, or leave a tag
@@ -220,7 +251,9 @@ Plex Sans and Mono, hairline rules, no other colour.
 - [x] ICS export of the chosen route.
 - [x] Refresh data (final programme, 11 August 2026 — real rooms, 593 sessions).
   Worth one more pass if the RGS publishes late changes before 1 September.
-- [ ] Generalise: any Ex Ordo-hosted conference is ingestible the same way.
+- [x] **Generalise** — `PORTING.md` and `docs/build.html`. Ex Ordo is a
+  hostname change; other platforms need a new adapter and nothing else, because
+  `docs/data/sessions.json` is the only contract.
 
 Not affiliated with the RGS-IBG. Times shown in Europe/London; always check the
 official programme.

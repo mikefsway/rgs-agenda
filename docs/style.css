@@ -81,7 +81,7 @@ a { color: var(--link); }
 .box-label { display: block; font-weight: 600; font-size: 0.98rem; margin-top: 1.35rem; }
 .panel > .hint:first-of-type + .box-label { margin-top: 0.5rem; }
 
-textarea, input[type="search"] {
+textarea, input[type="search"], input[type="url"], input[type="text"] {
   width: 100%;
   font: inherit; color: inherit;
   padding: 0.6rem 0.7rem;
@@ -90,7 +90,17 @@ textarea, input[type="search"] {
   background: var(--card);
   resize: vertical;
 }
-textarea:hover, input[type="search"]:hover { border-color: #cfd1cc; }
+textarea:hover, input[type="search"]:hover,
+input[type="url"]:hover, input[type="text"]:hover { border-color: #cfd1cc; }
+/* Inside a fieldset the inputs sit on one line with their labels, so the
+   full-width rule above has to be undone rather than never applied — the
+   fieldsets on the main form hold checkboxes, which don't take it. */
+fieldset input[type="text"], input[type="date"] {
+  width: auto;
+  font: inherit; color: inherit;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--rule); border-radius: 3px; background: var(--card);
+}
 
 .parse-note {
   color: var(--ink-2); font-size: 0.85rem;
@@ -324,6 +334,31 @@ footer p { margin: 0 0 0.5rem; max-width: 38rem; }
   clip-path: inset(50%); overflow: hidden; white-space: nowrap;
 }
 
+/* ---- build.html: the generated prompt ----
+   Deliberately not styled as a hero. It is a wall of instructions for a
+   machine, and the page reads better if it looks like one — boxed, scrollable,
+   and not competing with the prose around it for attention. No yellow: nothing
+   here has been chosen. */
+.prompt-out {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word;
+  margin: 0.9rem 0 0; padding: 0.9rem 1rem;
+  max-height: 26rem; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--rule); border-radius: 3px;
+  color: var(--ink-2);
+}
+#copy-status { color: var(--ink-2); font-size: 0.85rem; }
+
+/* The one line on the main page that points at build.html. It sits under a
+   charted route, which is the only moment someone has seen what the thing
+   actually does. */
+.build-yours {
+  margin: 2.5rem 0 0; padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2); font-size: 0.9rem;
+}
+
 @media (max-width: 560px) {
   :root { --gutter: 3.6rem; }
   body { font-size: 1rem; }
@@ -342,7 +377,7 @@ footer p { margin: 0 0 0.5rem; max-width: 38rem; }
   .topbar { border-bottom: 1px solid #999; }
   .intro, .panel, footer,
   .view-tabs, .route-actions, #view-papers, #view-people, #view-lookup,
-  .pick-controls, .hidden-note, details.alts, details.contents,
+  .pick-controls, .hidden-note, details.alts, details.contents, .build-yours,
   .match-bar, #restored-note, .tagline { display: none !important; }
   #view-route[hidden], #results[hidden] { display: block !important; }
   .slot { padding-top: 0.5rem; break-inside: avoid; }

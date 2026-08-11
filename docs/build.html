@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build one for your conference · Navigator</title>
+<meta name="description" content="Navigator is open source. Paste your conference's programme URL and this page writes the instructions to port it — hand them to Claude Code and it does the work.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23fbfbf9'/><rect x='5' y='8' width='22' height='3' fill='%2317191a'/><rect x='4' y='15' width='24' height='8' fill='%23ffe066'/><rect x='5' y='17' width='16' height='3' fill='%2317191a'/></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <p class="wordmark"><span class="mark">navigator</span> <span class="dot">·</span> build your own</p>
+    <span class="mono"><a href="./">back to RGS-IBG 2026</a></span>
+  </div>
+</header>
+
+<div class="intro wrap">
+  <p class="lede">Navigator is open source. If you want one of these for a different
+  conference, fill in the four boxes below and this page writes the instructions.</p>
+  <p class="privacy-note">Hand them to <a href="https://claude.com/claude-code" rel="noopener">Claude
+  Code</a> (or any coding agent) and it will clone the project, write an adapter for your
+  programme, and hand back a site you can put on GitHub Pages. Nothing on this page is
+  sent anywhere — it's a text template, filled in by your browser.</p>
+</div>
+
+<main>
+<section class="panel wrap" aria-labelledby="build-h">
+  <h2 id="build-h">Your conference</h2>
+
+  <label class="box-label" for="conf-url">Programme URL</label>
+  <p class="hint">A link to the online programme or schedule — the page that lists the
+  sessions. Not the conference homepage, if they're different.</p>
+  <input id="conf-url" type="url" spellcheck="false" placeholder="https://event.example.com/programme">
+  <p class="parse-note" id="platform-note" hidden></p>
+
+  <label class="box-label" for="conf-name">Conference name</label>
+  <input id="conf-name" type="text" spellcheck="false" placeholder="e.g. European Conference on Something 2027">
+
+  <div class="controls">
+    <fieldset>
+      <legend>Dates</legend>
+      <label class="mono">from <input id="conf-start" type="date"></label>
+      <label class="mono">to <input id="conf-end" type="date"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Timezone</legend>
+      <label><input id="conf-tz" type="text" spellcheck="false" placeholder="Europe/London"></label>
+    </fieldset>
+  </div>
+
+  <h2 id="prompt-h">The instructions</h2>
+  <p class="hint">Copy this and paste it into Claude Code, in an empty directory. It will
+  ask you questions as it goes — the parts it can't work out from the programme alone.</p>
+
+  <div class="actions">
+    <button id="copy-btn" class="primary" type="button">Copy instructions</button>
+    <span id="copy-status" role="status" aria-live="polite"></span>
+  </div>
+
+  <pre id="prompt-out" class="prompt-out" tabindex="0"></pre>
+
+  <h2 id="honest-h">What this will and won't do</h2>
+  <p>It works when the programme has <strong>real text in it</strong> — a description per
+  session, or a handful of paper titles. Semantic matching against bare titles produces a
+  route that looks convincing and is close to arbitrary, so the instructions tell the agent
+  to check that first and stop if it isn't there.</p>
+  <p>It works best when the programme has a public API or an export feed. If the site only
+  renders HTML, the agent will write a scraper, and that is the part most likely to need
+  your help. If the programme is behind a login, it can't be done — the whole tool works by
+  shipping the programme to the visitor's browser.</p>
+  <p>Size matters too: the embeddings are about 768 bytes per session description or paper
+  title, so a 3,000-session mega-conference produces a download nobody wants. The
+  instructions cover what to do about that.</p>
+
+  <h2 id="credit-h">The deal</h2>
+  <p>It's <a href="https://github.com/mikefsway/rgs-agenda/blob/master/LICENSE" rel="noopener">MIT
+  licensed</a> — take it, change it, sell it if you can. Two things asked for rather than
+  required: keep a credit line in the footer of whatever you deploy, and send improvements
+  back as a pull request. The matching engine took a lot of quiet failures to get right, and
+  they're all written down in the repo so you don't have to repeat them.</p>
+  <p>Keep the downloaded profile in <a href="https://fraglet.org" rel="noopener">fraglet</a>
+  shape while you're at it. It's the reason a profile you wrote for one conference tool can
+  be reused in the next one.</p>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Navigator is by <a href="https://github.com/mikefsway" rel="noopener">Mike Fell</a>.
+    Source and porting guide: <a href="https://github.com/mikefsway/rgs-agenda" rel="noopener">github.com/mikefsway/rgs-agenda</a>.</p>
+    <p class="mono">no tracking · no account · this page sends nothing anywhere</p>
+  </div>
+</footer>
+
+<script type="module" src="build.js"></script>
+</body>
+</html>

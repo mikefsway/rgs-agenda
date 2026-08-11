@@ -58,6 +58,11 @@ try {
   ok("index.html loads", (await head(BASE)) === 200);
   appjs = await (await get(BASE + "app.js")).text();
   ok("app.js loads", appjs.length > 1000);
+  // index.html links to build.html in two places and sw.js does not precache
+  // it, so a missed file in a deploy shows up as a 404 for a visitor rather
+  // than a stale-but-working page.
+  ok("build.html loads", (await head(BASE + "build.html")) === 200);
+  ok("build.js loads", (await head(BASE + "build.js")) === 200);
   const sw = await (await get(BASE + "sw.js")).text();
   info(`service worker cache ${(sw.match(/const CACHE = "([^"]+)"/) || [])[1]}`);
 } catch (e) {
