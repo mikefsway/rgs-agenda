@@ -7,7 +7,7 @@
  * per check; add --quiet to print only failures, which is what a cron job
  * wants.
  *
- * Traverse has no server to fall over, so the outages that can actually happen
+ * Navigator has no server to fall over, so the outages that can actually happen
  * are all somewhere else:
  *
  *  - a half-deployed Pages build, where the four data files disagree. The four
@@ -48,7 +48,7 @@ async function get(url) {
   return r;
 }
 
-console.log(`traverse monitor — ${BASE} — ${new Date().toISOString()}`);
+console.log(`navigator monitor — ${BASE} — ${new Date().toISOString()}`);
 
 // ---------- the site itself ----------
 

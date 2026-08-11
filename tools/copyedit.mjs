@@ -21,7 +21,7 @@
  * failed check writes nothing.
  *
  * Note it does NOT bump CACHE in a service worker. For copy that's right — a
- * bump re-downloads every cached file, which for Traverse is 2.5 MB of
+ * bump re-downloads every cached file, which for Navigator is 2.5 MB of
  * embeddings to fix a typo. Stale-while-revalidate picks the new text up on
  * the visit after next either way.
  */

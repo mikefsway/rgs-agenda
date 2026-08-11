@@ -1,4 +1,4 @@
-# Traverse — a personalised route through RGS-IBG 2026
+# Navigator — a personalised route through RGS-IBG 2026
 
 Tell it what you've worked on and what you want from the week; get a suggested
 personal agenda for the RGS-IBG Annual International Conference 2026

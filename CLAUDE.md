@@ -1,4 +1,4 @@
-# Traverse — working notes
+# Navigator — working notes
 
 Client-side personalised agenda for RGS-IBG 2026. See README.md for what it is
 and how the matching engine works; this file is the stuff that bites.
@@ -305,6 +305,26 @@ lessons, the hard way, on the same user's machine:
   refuses and deletes a route whose signature doesn't match the boxes on
   screen. When a bug writes bad state, fixing the writer is half the job;
   the other half is refusing to read what it already wrote.
+
+## It was called Traverse, and four strings still are
+
+Renamed to **Navigator** on 11 Aug 2026 (page title, wordmark, docs, ICS
+`PRODID`, download filename, the pipeline's user-agent). Four `traverse`
+strings survive on purpose, and finishing the rename breaks something in each
+case:
+
+- `traverse.rgs2026.route.v2`, `traverse.rgs2026.fraglet`,
+  `traverse.embcache.*` — localStorage keys. Renaming them silently discards
+  every saved route and profile and re-embeds every cached vector.
+- `UID:traverse-<id>@rgs2026` in the ICS export. A UID is a calendar's identity
+  for an event, so a changed one turns a re-import into a second copy of the
+  conference rather than an update of the first.
+- `CACHE = "traverse-v5"` in `sw.js`. It's an internal cache name; bumping it
+  makes every returning visitor re-download 2.5 MB of embeddings, which is the
+  one thing a rename should not cost them.
+
+None of them is visible to a user. The repo and the Pages URL keep the
+`rgs-agenda` name too.
 
 ## Persistence and caching — three layers, three invalidation rules
 

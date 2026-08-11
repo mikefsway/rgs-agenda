@@ -46,7 +46,7 @@ def get_json(url: str, tries: int = 4) -> dict:
     for attempt in range(tries):
         try:
             req = urllib.request.Request(
-                url, headers={"Accept": "application/json", "User-Agent": "traverse-pipeline/1.0"}
+                url, headers={"Accept": "application/json", "User-Agent": "navigator-pipeline/1.0"}
             )
             with urllib.request.urlopen(req, timeout=120) as resp:
                 return json.loads(resp.read().decode())

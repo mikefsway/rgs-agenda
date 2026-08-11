@@ -1,4 +1,4 @@
-/* Traverse — client-side agenda builder for RGS-IBG 2026.
+/* Navigator — client-side agenda builder for RGS-IBG 2026.
  *
  * All matching runs in the browser: the programme ships as precomputed
  * bge-small embeddings (float16 matrix); the user's text is embedded locally
@@ -426,7 +426,7 @@ function buildFraglet(worksRaw, goalsRaw, days, mode) {
     tags: ["rgs-ibg-2026", `mode:${mode}`, ...days.map((d) => `day:${d}`)],
     visibility: "private",
     created_at: new Date().toISOString(),
-    source: "traverse",
+    source: "navigator",
   };
 }
 
@@ -1208,7 +1208,7 @@ function evidenceText(r) {
 
 function buildIcs(days) {
   const stamp = icsDate(new Date().toISOString());
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Traverse//RGS-IBG 2026//EN",
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Navigator//RGS-IBG 2026//EN",
     "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
   for (const slots of days.values()) {
     for (const slot of slots) {
@@ -1242,7 +1242,7 @@ function downloadIcs() {
   const blob = new Blob([buildIcs(STATE.agenda.days)], { type: "text/calendar" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "rgs2026-route.ics";
+  a.download = "navigator-rgs2026-route.ics";
   a.click();
   URL.revokeObjectURL(a.href);
 }

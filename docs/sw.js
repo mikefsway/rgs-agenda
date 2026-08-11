@@ -1,4 +1,4 @@
-/* Traverse service worker.
+/* Navigator service worker.
  *
  * The whole point of a client-side agenda is that it still opens in a basement
  * seminar room with no signal: cache the shell and the programme data. The
