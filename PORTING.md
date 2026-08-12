@@ -452,6 +452,12 @@ account; this is the short form.
   thread; without the `setTimeout(0)` between batches the status text never
   repaints and the ~10s wait reads as a hang.
 
+- **Keep the "write what you want, not what you don't" line under the goals
+  box.** The model has no negation handling, so "no more energy justice" scores
+  *towards* energy justice — measured on the RGS programme, that sentence
+  returns the refused sessions in the top three. It is a plain copy edit to
+  delete and it silently inverts what a user asked for.
+
 And one thing that is not a bug but is deliberate: a session scores
 `0.75 * best_facet + 0.25 * mean(top 3)`, so depth beats a lone bullseye. That
 throws away real signal on purpose — the single best-matching paper in the

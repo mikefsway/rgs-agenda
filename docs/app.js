@@ -546,7 +546,13 @@ function creditHtml(c) {
  * No threshold anywhere here — it is a sort. Ranking N things needs no cut-off, and
  * every absolute cut-off over bge scores in this file has had to be walked back to a
  * percentile eventually. */
-const TOP_PAPERS = 10;
+/* Deliberately deeper than the eye needs. This list is the only route a strong
+ * paper has to the screen when its session loses, and 10 of 2,217 was too tight
+ * to be that route: on a real profile "The Enshittification of the Smart City"
+ * — one paper of five in a session about urban placemaking — missed the cut and
+ * had to be found in the LLM brief instead. The cost of a longer list is
+ * scrolling; the cost of a short one is a paper nobody ever sees. */
+const TOP_PAPERS = 25;
 // One session's papers shouldn't eat the list: if five of your ten live in the same
 // room, that says one thing ("go there"), which the route already said. Capping at
 // two spends the rest of the list on sessions you'd otherwise never hear about.
@@ -1373,8 +1379,11 @@ that one. Rules:
 - The tool's rank is real information — it read every abstract and every paper
   title, which neither of us is going to do — but it is cosine similarity from a
   small model. It cannot do "not this", it cannot do "enough of that already",
-  and it slightly favours sessions with many papers. Treat a high rank as a
-  strong hint and a low rank as weak evidence of nothing much.
+  and it has a measured bias towards sessions with many papers: a best-of-nine
+  beats a best-of-one before the topic is considered at all, so a short session
+  starts low whatever it is about. Treat a high rank as a strong hint and a low
+  rank as weak evidence of nothing much — particularly for a session with only
+  one or two papers in it.
 - If a slot is better spent on a corridor conversation or a sit down, say that
   instead of picking something. A route with a deliberate gap in it is a better
   answer than four mediocre picks in a row.

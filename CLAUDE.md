@@ -157,7 +157,77 @@ matching facet of 3204 (`works p98, aims p99`) was buried five deep in a collaps
 Don't fix that in the aggregate; it isn't broken, and no reweighting reaches it
 anyway (the winning session led on the best-facet term too). `topPapers` reports
 underneath the aggregate instead, and the "worth catching" flag is exactly the
-case where the paper is close but its session isn't.
+case where the paper is close but its session isn't. That list is 25 long, not
+10: it is the only route a strong paper has to the screen once its session
+loses, and at 10 of 2,217 it wasn't wide enough to be one.
+
+## Known, measured, not fixed — 12 Aug 2026
+
+A real route was run through an LLM with the brief, and its complaints were
+checked against the code rather than taken at face value. Three were the tool's,
+and two of those are still here. Written down with the numbers so the next person
+doesn't have to re-derive them.
+
+**The goals box inverts negations, and negation is the natural thing to write.**
+"No more energy justice, I've done a decade of it" — this file's own example of
+what an LLM can do and embeddings can't — retrieves, against the shipped matrix,
+`Can energy justice be salvaged in Oceania?` (0.608), `Making climate justice the
+job of the state` (0.569) and `Energy justice and the longue durée of coloniality
+within energy systems` (0.565). It returns the thing being refused, at the top. A
+bi-encoder this size has no negation handling at all, and the box invites prose,
+so this is a live trap rather than a theoretical one. Mitigated for now by a line
+of hint copy under the box telling people to write what they want and to use the
+LLM brief for vetoes. The real fix is a third box scored as a *demotion* pool —
+rank sessions against the veto text and subtract — which is mechanically simple
+and doesn't disturb the works/goals blend. Not built.
+
+**Session score favours sessions with more facets, and by a lot.** Measured over
+300 simulated profiles (8 random facet vectors as the query, own session
+excluded), mean score percentile by facet count: 1 facet → 0.12, 3 → 0.31, 6 →
+0.54, 9 → 0.61. Correlation 0.46. Best-facet cosine alone climbs 0.658 → 0.785
+with count on queries that have no topical relationship to anything. This is the
+same pool-size artifact the two profile boxes have — a max over nine draws beats
+a max over three — and it is uncorrected here. Part of the effect is *meant* to
+be there, but it belongs in the `0.25 * mean(top 3)` term, which rewards depth on
+purpose; the `0.75 * best` term is supposed to answer "how good is the best thing
+in here" and currently also answers "how much is in here".
+
+The fix that stays inside the no-absolute-thresholds rule is the probability
+integral transform: convert facet scores to corpus percentiles, and a session's
+best-of-k becomes `p^k`, which is uniform under the null whatever k is. Simulated
+on the same 300 profiles it takes the correlation from 0.46 to 0.20, and the
+residual is the depth term doing its job. **Not applied** — it moves every route,
+so it needs the real-model protocol in "Verifying a scoring change" and a
+before/after diff, not a simulation. Until it is, the LLM brief says the bias is
+there in as many words.
+
+**There is no recency weighting, and this file used to claim there was.** The
+claim was that ordering is the recency prioritisation *under a cap*.
+`scholar.js` does sort newest-first, but `app.js` slices at
+`WORKS_MAX_TITLES = 120` and a real profile is 67 titles, so the sort never bites
+and a 2014 paper counts exactly as much as one from last year. On the fixture
+this is why the agenda leans on a decade-old back catalogue. The cheap fix is a
+"use only work since [year]" control — `scholar.js` already parses the years and
+the works panel already prints the span — which leaves the scoring maths alone
+and makes it the user's call rather than a decay constant someone invented.
+
+Two smaller ones from the same pass, both unbuilt: session **format** is in the
+data and shown nowhere, though it is something people genuinely choose on (a
+workshop you can argue in versus a panel you watch) — display it, don't score it;
+and **repeat convenors across a day** are detectable, since `session_organisers`
+is public and gives 747 named people, but shipping those names in a
+bulk-downloadable file is the same question the email redaction answered no to,
+so it needs deciding before it needs building.
+
+What the tool should *not* try to absorb: telling a topic from an object
+("Generative AI in Higher Education" matches on AI and is about marking;
+"Rural Spatial Justice" matched on "distributional" and is about broiler farms),
+the user's diary, and stamina. That is the brief's job and the division of labour
+working as designed. The one genuinely awkward gap is that the tool cannot say
+"your field is not at this conference" — every threshold is a percentile within
+this corpus, so a percentile can never report that the corpus is wrong for you.
+Calibrating the profile's match distribution against how well the programme's
+facets match *each other* might reach it. Untested.
 
 ## Checks — what each one is actually for
 
@@ -252,7 +322,9 @@ real — a synthetic fixture that looked convincing hid two genuine bugs:
 - Cited-by and year arrive as **one whitespace-separated line** (`366    2017`,
   sometimes `36*    2015`), not a cell each. `Number(line)` returns NaN, drops
   the line, and takes the year with it — which silently kills the newest-first
-  ordering, and ordering *is* the recency prioritisation under a cap.
+  ordering, and ordering *is* the recency prioritisation under a cap — which is
+  worth less than it sounds, since the cap almost never binds. See "Known,
+  measured, not fixed".
 - Everything above the `Title / Cited by / Year` header is profile furniture, and
   several lines of it are indistinguishable from titles by shape ("Based on
   funding mandates", "University of Exeter"). `sliceToTable` cuts structurally;
