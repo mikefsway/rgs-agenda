@@ -325,8 +325,32 @@ survive on purpose because finishing the rename breaks something in each case:
   makes every returning visitor re-download 2.5 MB of embeddings, which is the
   one thing a rename should not cost them.
 
-None of them is visible to a user. The repo and the Pages URL keep the
-`rgs-agenda` name too.
+None of them is visible to a user. This repo and its Pages URL keep the
+`rgs-agenda` name too — it is the deployed RGS-IBG instance, and renaming it
+would break every link anyone has already shared.
+
+## Two repos now, and which one a change belongs in
+
+Since 12 Aug 2026 the code lives in two places:
+
+- **`agenda-navigator`** — the kit. Same tree, minus `docs/data/`, plus a README
+  that says so. It is what `build.html` tells people to clone and what
+  `PORTING.md` is written for. No Pages site: `index.html` there would be the
+  app with no conference behind it, and deploying it under
+  `mikefsway.github.io` would put a second copy of this code on *the same
+  origin*, sharing `localStorage` with this one — the exact trap `PORTING.md`
+  §7 warns ports about. The porting front door stays on this site, at
+  `/rgs-agenda/build.html`.
+- **`rgs-agenda`** — this one. The canonical example, deployed, with the
+  programme in it.
+
+Everything except `README.md`, `docs/data/`, `test/monitor.mjs`'s default URL,
+`test/data.test.mjs`'s skip guard and `.github/workflows/check.yml` is identical
+in both, and **a fix to any of that has to land in both**. There is no
+submodule, no subtree and no sync script, because either would be a build step
+and this repo does not have one. What there is instead: the kit's copy is
+generated from `git ls-files` here minus `docs/data/`, so regenerating it is one
+command and a diff will show anything that has drifted.
 
 ## Persistence and caching — three layers, three invalidation rules
 

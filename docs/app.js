@@ -110,13 +110,26 @@ function loadData() {
   return dataPromise;
 }
 
+/* A 404 here means one specific thing and it is worth saying so. `docs/data/`
+ * is a pipeline output, not a source file, so a fresh clone of the kit has none
+ * of it — and so does a port between `normalize.py` and `embed.py`. Left to
+ * itself that arrives as "Unexpected token < in JSON", which sends a porter
+ * looking at the parser rather than at the three commands they haven't run. */
+class NoProgrammeData extends Error {}
+
+async function fetchOne(path, as) {
+  const r = await fetch(path);
+  if (r.status === 404) throw new NoProgrammeData(path);
+  return as === "bin" ? r.arrayBuffer() : r.json();
+}
+
 async function fetchData() {
   setStatus("loading programme…");
   const [meta, sessionsDoc, facets, binBuf] = await Promise.all([
-    fetch("data/meta.json").then((r) => r.json()),
-    fetch("data/sessions.json").then((r) => r.json()),
-    fetch("data/facets.json").then((r) => r.json()),
-    fetch("data/embeddings.bin").then((r) => r.arrayBuffer()),
+    fetchOne("data/meta.json"),
+    fetchOne("data/sessions.json"),
+    fetchOne("data/facets.json"),
+    fetchOne("data/embeddings.bin", "bin"),
   ]);
   const matrix = f16ToF32(new Uint16Array(binBuf));
   assertOrder(meta, sessionsDoc.sessions);
@@ -1413,7 +1426,11 @@ function refreshWorksNote() {
 
 // One message per way this actually fails. "Something went wrong" was covering
 // for offline, a CDN outage and a scoring bug alike, which helps nobody.
-function failureMessage(stage) {
+function failureMessage(stage, err) {
+  if (err instanceof NoProgrammeData) {
+    return "no programme data in docs/data/ — this is the kit, not a conference. "
+      + "Run pipeline/fetch.py, normalize.py and embed.py, or see PORTING.md.";
+  }
   if (!navigator.onLine) return "you're offline — the model can't load until you're back on a network.";
   if (stage === "data") return "couldn't load the programme data — refresh and try again.";
   if (stage === "model") return "couldn't load the language model (CDN hiccup?) — refresh and try again.";
@@ -1472,7 +1489,7 @@ async function plan() {
     setStatus("");
   } catch (err) {
     console.error(err);
-    setStatus(failureMessage(stage));
+    setStatus(failureMessage(stage, err));
   } finally {
     btn.disabled = false;
     document.body.classList.remove("working");
@@ -1523,7 +1540,10 @@ try {
 loadData()
   .then(() => { setStatus(""); restoreRoute(); return loadEmbedder(); })
   .then(() => setStatus(""))
-  .catch(() => setStatus(""));
+  // ...with one exception: a missing docs/data/ is not a transient failure that
+  // retrying will fix, and saying so on load beats letting someone fill in the
+  // boxes first and find out afterwards.
+  .catch((e) => setStatus(e instanceof NoProgrammeData ? failureMessage(null, e) : ""));
 
 // Offline support: cache the shell and data so the route opens on venue wifi
 // (or none). The model is already cached by transformers.js itself.

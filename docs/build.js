@@ -13,7 +13,7 @@
 
 const $ = (sel) => document.querySelector(sel);
 
-const REPO = "https://github.com/mikefsway/rgs-agenda";
+const REPO = "https://github.com/mikefsway/agenda-navigator";
 
 /* Starting points, not facts. Every hint here is phrased as something to check,
  * because these platforms change: the Ex Ordo API in this repo has already

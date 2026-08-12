@@ -510,12 +510,12 @@ this:
 like:
 
 ```html
-<p>Built with <a href="https://github.com/mikefsway/rgs-agenda">Agenda Navigator</a>
+<p>Built with <a href="https://github.com/mikefsway/agenda-navigator">Agenda Navigator</a>
 by Mike Fell. Profile format: <a href="https://fraglet.org">fraglet</a>.</p>
 ```
 
 If you improve the matching, the porting, or the pipeline, a pull request back
-to `github.com/mikefsway/rgs-agenda` is worth more than the credit line.
+to `github.com/mikefsway/agenda-navigator` is worth more than the credit line.
 
 Keep the profile in fraglet shape (`buildFraglet` in `app.js`:
 `{title, brief, detail, category, domain, tags, visibility: "private"}`) so a
