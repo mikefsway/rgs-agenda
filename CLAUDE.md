@@ -433,9 +433,10 @@ survive on purpose because finishing the rename breaks something in each case:
 - `UID:traverse-<id>@rgs2026` in the ICS export. A UID is a calendar's identity
   for an event, so a changed one turns a re-import into a second copy of the
   conference rather than an update of the first.
-- `CACHE = "traverse-v5"` in `sw.js`. It's an internal cache name; bumping it
-  makes every returning visitor re-download 2.5 MB of embeddings, which is the
-  one thing a rename should not cost them.
+- `CACHE = "traverse-v<n>"` in `sw.js` (v7 as of 12 Aug 2026). It's an internal
+  cache name and the version is bumped routinely; renaming the *stem* is what
+  costs: it makes every returning visitor re-download 2.5 MB of embeddings,
+  which is the one thing a rename should not cost them.
 
 None of them is visible to a user. This repo and its Pages URL keep the
 `rgs-agenda` name too — it is the deployed RGS-IBG instance, and renaming it
