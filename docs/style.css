@@ -330,6 +330,16 @@ body.working #status::before {
   gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;
 }
 
+/* The one control on the page that sends anything anywhere, so the caveat runs
+   with it rather than sitting in a footnote. Not styled as a warning: it is a
+   reasonable thing to choose, and a red box would say otherwise. */
+.llm-note {
+  color: var(--ink-2); font-size: 0.85rem; line-height: 1.45;
+  margin: 0 0 0.5rem; max-width: 46rem;
+}
+.llm-note strong { color: var(--ink); font-weight: 500; }
+#llm-hint { margin: 0 0 0.6rem; }
+
 /* ---- day jump ---- */
 .day-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .day-tabs button {
@@ -512,6 +522,7 @@ footer p { margin: 0 0 0.5rem; max-width: 38rem; }
   .topbar { border-bottom: 1px solid #999; }
   .intro, .panel, footer,
   .view-tabs, .route-actions, #view-papers, #view-people, #view-lookup,
+  .llm-note, #llm-hint,
   .pick-controls, .hidden-note, details.alts, details.contents, .build-yours,
   .match-bar, #restored-note, .tagline { display: none !important; }
   #view-route[hidden], #results[hidden] { display: block !important; }

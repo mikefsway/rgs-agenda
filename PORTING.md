@@ -473,7 +473,15 @@ reasons, a hosted embedding API, analytics — **is a change to that promise, no
 an implementation detail.** If you add one, change the copy on the landing page
 in the same commit, and make it opt-in. Do not quietly keep the privacy note.
 
-Three things that are easy to keep and easy to lose:
+**There is exactly one deliberate exception, and it is labelled.** The "copy a
+brief for your own AI" button hands the user's profile and their route to
+whatever LLM they choose, which means it does leave the device. That is fine —
+it is their LLM and their decision — and it is fine *because the copy next to
+the button says so in those words*. If you keep the feature, keep the label with
+it. A port that quietly drops the caveat while keeping the button has turned an
+honest choice into a lie, and nobody will notice until someone checks.
+
+Three more things that are easy to keep and easy to lose:
 
 - **No third-party requests you don't need.** The fonts here are served from
   `docs/fonts/` rather than from Google, because a webfont link sends every

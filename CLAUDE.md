@@ -104,6 +104,46 @@ What replaced it is deliberately plainer, and the plainness has rules:
 If a change here starts adding a metaphor, ask whether the metaphor carries
 information. The gutter does. A coordinates line does not.
 
+## The LLM brief is the one thing that leaves the device, and it says so
+
+`buildBrief` copies a markdown brief for the user's own LLM: their two boxes,
+the route with its evidence, and the top 14 of every slot. It is a **second
+opinion on the route, not a second route**, and the division of labour is the
+whole design. The embedding pass ranks all 593 without getting bored or
+anchoring on what it read first, and cannot do "no more energy justice, I've
+done a decade of it", "nothing before 10", or "that's the same four people I saw
+yesterday". An LLM is good at exactly those and would be bad at the ranking,
+because 593 items in one pass is where anchoring and skimming the middle live.
+
+Three things about it are load-bearing:
+
+- **It is a change to the privacy promise, made by the user.** Pasting into
+  Claude sends the profile to Anthropic. That is a perfectly reasonable thing to
+  choose and a completely unreasonable thing to be quiet about on this page, so
+  the caveat sits next to the button in those words rather than in a footnote.
+  It is deliberately not styled as a warning — a red box would argue against a
+  choice that is fine.
+- **The shortlist is deep and tiered.** 14 per slot, not the 4 the page draws,
+  because the LLM's entire job is to reach for something the cosine put ninth.
+  But rank 12 of a 45-way slot is a weak match by construction, so the payload
+  drops by tier: the pick gets its full abstract and every paper, ranks 2–6 get
+  340 characters and 12 papers, and the tail gets title, time and six paper
+  titles. Flat payload measured 266 kB on the real fixture; tiered is 201 kB for
+  the same 185 sessions, and what got cut is what nobody would have read.
+  It works — on a profile saying "I now work on AI agents", the 09:00 slot put
+  *AI and Climate* at rank 11 and *Uneven and Contested Geographies of Data
+  Centers* at 14, both far below the fold of the page and both obviously worth
+  surfacing to a reader who knows what the profile means.
+- **It asks for questions before answers.** The prompt tells the model to ask
+  two or three clarifying questions first and to use what it already knows about
+  the user from previous conversations — which is the actual reason to prefer
+  your own LLM over a stranger's website, and the one input this tool can never
+  have.
+
+`slot.ranked` exists for this. It holds references, not copies, and `saveRoute`
+serialises `STATE.results` rather than the agenda, so nothing extra reaches
+localStorage.
+
 ## Sessions vs papers — the aggregate is lossy on purpose
 
 A session scores `0.75 * best facet + 0.25 * mean(top 3)`, so depth beats a lone

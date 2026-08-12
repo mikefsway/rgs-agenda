@@ -134,7 +134,13 @@ async function fetchData() {
   const matrix = f16ToF32(new Uint16Array(binBuf));
   assertOrder(meta, sessionsDoc.sessions);
   const byId = new Map(sessionsDoc.sessions.map((s) => [s.id, s]));
-  DATA = { sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta, byId };
+  // `conference` is part of the sessions.json contract (PORTING.md §2) and is
+  // the one place the conference names itself, so a port gets it right without
+  // touching app.js. Only the LLM brief reads it; the page says RGS-IBG in copy.
+  DATA = {
+    sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta, byId,
+    conference: sessionsDoc.conference || "the conference",
+  };
   const n = $("#n-sessions");
   if (n) n.textContent = DATA.sessions.length;
   return DATA;
@@ -849,6 +855,11 @@ function buildAgenda(results, prefs) {
       weak: p.weak,
       hidden: p.hidden,
       relStrength: norm(top.score),
+      // The whole slot in rank order. The page only ever draws the top four, but
+      // the LLM brief wants a deeper shortlist and this is already computed —
+      // it holds references, not copies, and saveRoute serialises STATE.results
+      // rather than the agenda, so nothing here reaches localStorage.
+      ranked: p.ranked,
     };
     if (!days.has(p.day)) days.set(p.day, []);
     days.get(p.day).push(slot);
@@ -1260,6 +1271,192 @@ function downloadIcs() {
   URL.revokeObjectURL(a.href);
 }
 
+/* ---------- the brief for your own LLM ----------
+ *
+ * A second opinion on the route, not a second route. The split of labour is the
+ * point: the embedding pass ranks all 593 sessions without getting bored or
+ * anchoring on what it read first, and is completely unable to handle "no more
+ * energy justice, I've done a decade of it", "nothing before 10", or "that's
+ * the same four people I saw yesterday". An LLM is good at exactly those and
+ * would be bad at the ranking — 593 items in one pass is where anchoring and
+ * skimming the middle live.
+ *
+ * So this hands over the ranking as a result and asks for the judgement. It
+ * carries a deep shortlist rather than the four picks the page draws, because
+ * the LLM's whole job is to reach for something the cosine put fifth.
+ *
+ * SHORTLIST_PER_SLOT is set from measurement, not taste: at 14 the brief is
+ * ~120 kB / ~30k tokens on the real fixture, which every current model takes
+ * comfortably and which claude.ai converts to an attachment on paste. Raising
+ * it is cheap in tokens and gets steadily less useful — by rank 14 the sessions
+ * are ones the profile barely touches.
+ *
+ * This is the one feature here that sends the user's text off the device, and
+ * the copy next to the button says so in those words. It is their LLM and their
+ * choice; it is not a thing to be quiet about on a page whose pitch is the
+ * opposite. */
+const SHORTLIST_PER_SLOT = 14;
+
+/* Three tiers, because the deep end of the shortlist is there to be *noticed*,
+ * not read. A session at rank 12 of a 45-way slot is a weak match by
+ * construction; carrying its full abstract costs about a kilobyte and buys
+ * nothing, while its title and its paper titles are what let the model spot
+ * that it is the one thing all week about the subject I actually asked for.
+ * Measured on the real fixture: flat payload gave 266 kB, tiered gives ~150 kB
+ * for the same 185 sessions, and the part that got cut is the part no reader
+ * would have reached. */
+const TIERS = {
+  pick:  { desc: Infinity, papers: Infinity, evidence: true },
+  near:  { desc: 340, papers: 12, evidence: true },    // ranks 2–6
+  tail:  { desc: 0, papers: 6, evidence: false },      // 7 and down
+};
+const NEAR_DEPTH = 6;
+
+function briefSession(r, tier) {
+  const s = r.session;
+  const bits = [`### ${s.title}`];
+  const meta = [`${dayShort(s.day)} ${t(s.start)}–${t(s.end)}`, venueLabel(s) || "venue tbc"];
+  if (s.code) meta.push(s.code);
+  bits.push(meta.join(" · "));
+  const desc = tier.desc === Infinity ? s.description : trunc(s.description || "", tier.desc);
+  if (tier.desc && desc) bits.push(desc.replace(/\n+/g, " "));
+  if (s.papers.length) {
+    const shown = tier.papers === Infinity ? s.papers : s.papers.slice(0, tier.papers);
+    bits.push(shown.map((p) => `- ${p.title}`).join("\n"));
+    if (shown.length < s.papers.length) bits.push(`- …and ${s.papers.length - shown.length} more papers`);
+  }
+  const ev = tier.evidence && r.evidence?.length ? evidenceText(r) : "";
+  if (ev) bits.push(`Matched because: ${ev}`);
+  return bits.join("\n");
+}
+
+function buildBrief() {
+  if (!STATE?.agenda) return "";
+  const { days, norm } = STATE.agenda;
+  const rank = new Map(STATE.results.map((r, i) => [r.session.id, i + 1]));
+  const total = STATE.results.length;
+  const works = $("#works").value.trim();
+  const goals = $("#goals").value.trim();
+  const out = [];
+
+  out.push(`# Help me finish my ${DATA.conference} agenda`, "");
+  out.push(
+`I've run the programme through a matching tool. It embedded all ${DATA.sessions.length} sessions
+and everything in them, scored them against the two descriptions of my work
+below, and produced the route in part 2. Part 3 is the deeper shortlist: for
+every timeslot, the sessions it ranked highest, most of which never made it onto
+my screen.
+
+What I want from you is the judgement the tool can't do. It compares text to
+text. It doesn't know that I've already spent years on something and want to
+move on, that I promised to be somewhere at four, or that two sessions are the
+same people twice. You do — or you can ask.
+
+Before you give me a route:
+
+1. Ask me two or three questions, whichever ones would actually change your
+   answer. Things worth asking about are usually what I'm trying to get out of
+   the week (ideas? collaborators? a job? a break?), what I want to avoid
+   despite it matching my past work, and anything fixed in my diary already.
+2. Use what you already know about me from our previous conversations — my
+   actual research, who I work with, what I've been complaining about, what I
+   said I wanted to learn. That is the thing you have and the matching tool
+   doesn't. Say when you're using it, so I can correct you.
+
+Then give me one pick per timeslot, in time order, each with a sentence on why
+that one. Rules:
+
+- Only use sessions listed below. Don't invent one, and don't reach for a
+  session you think ought to exist — if the right thing isn't here, say so.
+- Where you disagree with the tool's pick, say so explicitly and say why. Those
+  are the interesting ones and I want to see them flagged, not smoothed over.
+- The tool's rank is real information — it read every abstract and every paper
+  title, which neither of us is going to do — but it is cosine similarity from a
+  small model. It cannot do "not this", it cannot do "enough of that already",
+  and it slightly favours sessions with many papers. Treat a high rank as a
+  strong hint and a low rank as weak evidence of nothing much.
+- If a slot is better spent on a corridor conversation or a sit down, say that
+  instead of picking something. A route with a deliberate gap in it is a better
+  answer than four mediocre picks in a row.
+- Tell me the two or three sessions across the whole week you'd least want me to
+  miss, and why those.`, "");
+
+  out.push("---", "", "## 1. Me", "");
+  out.push("### What I've worked on", "", works || "_(left blank)_", "");
+  out.push("### What I'm working on now, and what I want from the week", "", goals || "_(left blank)_", "");
+  const f = STATE.filters;
+  out.push(`_Filters I set: days ${[...f.days].sort().join(", ") || "all"}; attendance ${f.mode}._`, "");
+
+  out.push("---", "", "## 2. The route the tool produced", "");
+  for (const [day, slots] of days) {
+    out.push(`### ${dayName(day)}`, "");
+    for (const slot of slots) {
+      const head = `**${t(slot.start)}–${t(slot.end)}** (${slot.parallel} sessions run against each other)`;
+      if (slot.weak) {
+        out.push(`${head} — nothing scored well here. Tool's best guess: ${slot.pick.session.title}`, "");
+        continue;
+      }
+      if (slot.clashWith) {
+        out.push(`${head} — **too close to call**, the tool refused to choose:`);
+        out.push(`- ${slot.pick.session.title}`);
+        out.push(`- ${slot.clashWith.session.title}`, "");
+        continue;
+      }
+      out.push(`${head}${slot.pinned ? " — I pinned this one myself" : ""}`);
+      out.push(`${slot.pick.session.title} — ranked #${rank.get(slot.pick.session.id)} of ${total} for me`);
+      const ev = evidenceText(slot.pick);
+      if (ev) out.push(`_${ev}_`);
+      out.push("");
+    }
+  }
+
+  out.push("---", "", "## 3. Everything I could go to instead", "");
+  out.push(
+`For each timeslot, in the tool's rank order — the top ${SHORTLIST_PER_SLOT} of however many
+were running. Deeper down the list you get the title and the papers but not the
+abstract: those are there so you can spot one, not so you can read them all. Ask
+me and I'll paste the full text of any of them. Socials, receptions and AGMs are
+filtered out and aren't here at all.`, "");
+  for (const [day, slots] of days) {
+    out.push(`### ${dayName(day)}`, "");
+    for (const slot of slots) {
+      out.push(`#### ${t(slot.start)}–${t(slot.end)}`, "");
+      const shortlist = (slot.ranked || []).slice(0, SHORTLIST_PER_SLOT);
+      shortlist.forEach((r, i) => {
+        const isPick = r === slot.pick;
+        const tier = isPick ? TIERS.pick : (i < NEAR_DEPTH ? TIERS.near : TIERS.tail);
+        const tag = isPick ? "[TOOL'S PICK] " : (r === slot.clashWith ? "[TOO CLOSE TO CALL] " : "");
+        out.push(briefSession(r, tier).replace(/^### /, `### ${tag}`), "");
+      });
+      if ((slot.ranked || []).length > shortlist.length) {
+        out.push(`_(${slot.ranked.length - shortlist.length} lower-ranked sessions in this slot are not listed.)_`, "");
+      }
+    }
+  }
+  return out.join("\n");
+}
+
+async function copyBrief(btn) {
+  const text = buildBrief();
+  if (!text) return;
+  const hint = $("#llm-hint");
+  try {
+    await navigator.clipboard.writeText(text);
+    hint.textContent = `Copied — ${Math.round(text.length / 1024)} kB. Paste it into Claude, ChatGPT or whatever you use.`;
+  } catch {
+    // Clipboard needs a secure context and a permission; falling back to a
+    // download beats a button that silently does nothing.
+    const blob = new Blob([text], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "agenda-navigator-brief.md";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    hint.textContent = "Couldn't reach the clipboard, so it downloaded instead — attach the file to your chat.";
+  }
+  hint.hidden = false;
+}
+
 // ---------- now / next ----------
 
 // Only meaningful during the conference itself; the rest of the year the route
@@ -1510,6 +1707,7 @@ function downloadFraglet() {
 $("#plan-btn").addEventListener("click", plan);
 $("#save-fraglet").addEventListener("click", downloadFraglet);
 $("#ics-btn").addEventListener("click", downloadIcs);
+$("#llm-btn").addEventListener("click", (e) => copyBrief(e.currentTarget));
 
 let noteTimer = null;
 $("#works").addEventListener("input", () => {

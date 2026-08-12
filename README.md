@@ -128,6 +128,14 @@ fixed threshold badges everything or nothing.
   matches what the public data actually supports.
 - **ICS export** of the chosen route; unresolved clashes export as two
   overlapping events, which is what they are.
+- **A brief for your own LLM** — the route, your profile, and the top 14 of
+  every timeslot rather than the four the page draws, as markdown on the
+  clipboard. It asks the model to question you before answering and to use what
+  it already knows about you, which is the one input this tool can't have. A
+  second opinion on the route rather than a second route: the embedding pass
+  ranks 593 sessions without getting bored, and cannot do "no more of that,
+  I've had a decade of it". This is the only feature here that sends your text
+  off your device, by your choice, and the page says so next to the button.
 - During 1–4 September the route marks the current/next slot and opens there.
 
 ## Data provenance
@@ -214,7 +222,7 @@ node tools/copyedit.mjs                       # on the machine holding the repo
 ssh -L 7000:localhost:7000 <that machine>     # from anywhere else
 ```
 
-Then open `http://localhost:7000`: one box per piece of copy — 45 of them in
+Then open `http://localhost:7000`: one box per piece of copy — 47 of them in
 `docs/index.html` and 29 in `docs/build.html`, including page titles, meta
 descriptions, placeholders and aria-labels. Save writes the file back with everything else untouched, keeping
 the hand-wrapping. Publish runs the tests, commits and pushes.

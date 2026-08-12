@@ -96,7 +96,14 @@
     <div class="route-actions">
       <nav id="day-tabs" class="day-tabs" aria-label="Conference days"></nav>
       <button id="ics-btn" class="ghost" type="button">Download calendar (.ics)</button>
+      <button id="llm-btn" class="ghost" type="button">Copy a brief for your own AI</button>
     </div>
+    <p class="llm-note">The brief holds your route, a long shortlist for every timeslot, and
+    what you wrote about yourself. Paste it into Claude, ChatGPT or whatever you use, and it
+    can weigh things this page can't -- what you already have enough of, who you're avoiding,
+    what's in your diary. <strong>This is the one button here that sends your text off your
+    device</strong>, to whoever runs that AI. Everything else stays in this browser.</p>
+    <p class="hint" id="llm-hint" hidden></p>
     <div id="route"></div>
   </div>
 
