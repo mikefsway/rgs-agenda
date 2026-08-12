@@ -29,9 +29,14 @@ WRITE=${1:-}
 [ -d "$KIT/.git" ] || { echo "no kit repo at $KIT (set KIT=... to override)"; exit 1; }
 
 DIVERGENT="README.md CLAUDE.md test/data.test.mjs test/monitor.mjs .github/workflows/check.yml"
+# ...and this script itself, which maintains the kit from here and has no job
+# inside it. Without this line it copies itself over and the kit acquires a tool
+# that would overwrite the kit from a repo it doesn't have.
+NOT_IN_KIT="tools/sync-kit.sh"
 
 cd "$SRC"
-shared=$(git ls-files | grep -v '^docs/data/' | grep -vxF "$(echo "$DIVERGENT" | tr ' ' '\n')" || true)
+skip=$(printf '%s\n%s\n' "$(echo "$DIVERGENT" | tr ' ' '\n')" "$NOT_IN_KIT")
+shared=$(git ls-files | grep -v '^docs/data/' | grep -vxF "$skip" || true)
 
 changed=0
 while read -r f; do
