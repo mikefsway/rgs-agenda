@@ -1,4 +1,4 @@
-# Navigator — working notes
+# Agenda Navigator — working notes
 
 Client-side personalised agenda for RGS-IBG 2026. See README.md for what it is
 and how the matching engine works; this file is the stuff that bites.
@@ -308,10 +308,12 @@ lessons, the hard way, on the same user's machine:
 
 ## It was called Traverse, and four strings still are
 
-Renamed to **Navigator** on 11 Aug 2026 (page title, wordmark, docs, ICS
-`PRODID`, download filename, the pipeline's user-agent). Four `traverse`
-strings survive on purpose, and finishing the rename breaks something in each
-case:
+Renamed twice: to **Navigator** on 11 Aug 2026, and to **Agenda Navigator** on
+12 Aug 2026 when the engine moved to its own repo and the bare word turned out
+to be both taken and uninformative. Both renames covered the same surface —
+page title, wordmark, docs, ICS `PRODID`, download filename, the pipeline's
+user-agent — and both stopped at the same four `traverse` strings, which
+survive on purpose because finishing the rename breaks something in each case:
 
 - `traverse.rgs2026.route.v2`, `traverse.rgs2026.fraglet`,
   `traverse.embcache.*` — localStorage keys. Renaming them silently discards

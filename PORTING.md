@@ -1,4 +1,4 @@
-# Porting Navigator to another conference
+# Porting Agenda Navigator to another conference
 
 You are reading this because someone wants a personalised agenda for a
 conference that isn't RGS-IBG 2026. This file is the instruction set for doing
@@ -333,7 +333,7 @@ makes a pick persuasive, and it is inherent to the data rather than fixable.
 
 > **The localStorage trap.** If you deploy to GitHub Pages at
 > `<user>.github.io/<repo>/`, **every repo under that account shares one
-> origin**, and therefore one `localStorage`. Two Navigator ports on the same
+> origin**, and therefore one `localStorage`. Two Agenda Navigator ports on the same
 > account with the same keys will overwrite each other's saved routes and
 > serve each other's cached embeddings. Namespace every key with the
 > conference. This is the single most likely thing to go wrong on deploy and
@@ -510,7 +510,7 @@ this:
 like:
 
 ```html
-<p>Built with <a href="https://github.com/mikefsway/rgs-agenda">Navigator</a>
+<p>Built with <a href="https://github.com/mikefsway/rgs-agenda">Agenda Navigator</a>
 by Mike Fell. Profile format: <a href="https://fraglet.org">fraglet</a>.</p>
 ```
 

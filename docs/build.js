@@ -1,4 +1,4 @@
-/* Navigator — the "build one for your conference" page.
+/* Agenda Navigator — the "build one for your conference" page.
  *
  * Writes a prompt. That is all it does. There is no network call here and there
  * must not be one: the URL someone pastes is the thing they came to ask about,
@@ -23,7 +23,7 @@ const PLATFORMS = [
   {
     test: /(^|\.)exordo\.com$/i,
     name: "Ex Ordo",
-    hint: "Best case — this is the platform Navigator was built against, and pipeline/fetch.py already talks to it. Public JSON API at /api/virtual_published_contents, no auth. Read that file's header first: it encodes three behaviours that bite (page_size is clamped to 15 server-side, date=YYYY-MM-DD is the only day filter that works, and expansion is comma-separated dotted paths — expand[] returns a 500). Expect the adapter to be a change of hostname and dates rather than a rewrite.",
+    hint: "Best case — this is the platform Agenda Navigator was built against, and pipeline/fetch.py already talks to it. Public JSON API at /api/virtual_published_contents, no auth. Read that file's header first: it encodes three behaviours that bite (page_size is clamped to 15 server-side, date=YYYY-MM-DD is the only day filter that works, and expansion is comma-separated dotted paths — expand[] returns a 500). Expect the adapter to be a change of hostname and dates rather than a rewrite.",
   },
   {
     test: /(^|\.)pretalx\.com$/i,
@@ -78,12 +78,12 @@ const UNKNOWN_HINT =
 
 function slugify(name, url) {
   const base = (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  if (base) return `navigator-${base}`.slice(0, 48).replace(/-$/, "");
+  if (base) return `agenda-navigator-${base}`.slice(0, 48).replace(/-$/, "");
   try {
     const h = new URL(url).hostname.replace(/^www\./, "").split(".")[0];
-    if (h) return `navigator-${h}`;
+    if (h) return `agenda-navigator-${h}`;
   } catch { /* fall through */ }
-  return "navigator-port";
+  return "agenda-navigator-port";
 }
 
 /* The platform hints are a paragraph each, and the prompt is pasted into places
@@ -112,9 +112,9 @@ function buildPrompt({ name, url, start, end, tz, platform }) {
   const p = wrap(platform ? `${platform.name}. ${platform.hint}`
                           : `not recognised from the URL. ${UNKNOWN_HINT}`, 66, "             ");
   return `I want a personalised agenda tool for the conference below, built by porting
-Navigator — an open-source, entirely client-side conference agenda builder.
+Agenda Navigator — an open-source, entirely client-side conference agenda builder.
 
-What Navigator does: you paste your publication list and a sentence or two about
+What Agenda Navigator does: you paste your publication list and a sentence or two about
 what you're working on now, and it builds you a timetable out of the whole
 programme — a pick per slot with the evidence for it, alternatives underneath,
 and genuine clashes shown as a fork rather than silently resolved. The matching
@@ -249,11 +249,11 @@ purpose and re-run a full chart in a browser afterwards.
 
 CREDIT
 
-Navigator is MIT licensed (Mike Fell, 2026), so the copyright notice stays in
+Agenda Navigator is MIT licensed (Mike Fell, 2026), so the copyright notice stays in
 the source. Beyond that, one thing asked for rather than required: keep a
 visible credit line in the footer of whatever gets deployed —
 
-    Built with <a href="${REPO}">Navigator</a> by Mike Fell.
+    Built with <a href="${REPO}">Agenda Navigator</a> by Mike Fell.
     Profile format: <a href="https://fraglet.org">fraglet</a>.
 
 Keep the downloaded profile in fraglet shape (see buildFraglet in docs/app.js)

@@ -1,9 +1,9 @@
 ---
 name: port-navigator
-description: Port Navigator — the client-side personalised conference agenda tool — to a different conference. Use when the user wants a Navigator-style agenda builder for their own conference, asks to adapt this repo to another programme, or pastes a conference programme URL and asks for a personalised agenda tool.
+description: Port Agenda Navigator — the client-side personalised conference agenda tool — to a different conference. Use when the user wants an Agenda Navigator-style agenda builder for their own conference, asks to adapt this repo to another programme, or pastes a conference programme URL and asks for a personalised agenda tool.
 ---
 
-# Port Navigator to another conference
+# Port Agenda Navigator to another conference
 
 Read `PORTING.md` at the root of this repository and follow it. It is the
 canonical instruction set and is kept up to date; do not work from a summary.

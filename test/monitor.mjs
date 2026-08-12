@@ -7,8 +7,8 @@
  * per check; add --quiet to print only failures, which is what a cron job
  * wants.
  *
- * Navigator has no server to fall over, so the outages that can actually happen
- * are all somewhere else:
+ * Agenda Navigator has no server to fall over, so the outages that can
+ * actually happen are all somewhere else:
  *
  *  - a half-deployed Pages build, where the four data files disagree. The four
  *    are only meaningful together, and stale-while-revalidate will happily hand
@@ -48,7 +48,7 @@ async function get(url) {
   return r;
 }
 
-console.log(`navigator monitor — ${BASE} — ${new Date().toISOString()}`);
+console.log(`agenda navigator monitor — ${BASE} — ${new Date().toISOString()}`);
 
 // ---------- the site itself ----------
 
