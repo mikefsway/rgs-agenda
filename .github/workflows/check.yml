@@ -19,6 +19,14 @@ on:
     - cron: "12 7 * * *"
   workflow_dispatch:
 
+# Neither job writes anything, and a public repo gets pull requests from people
+# whose code these jobs then run. `pull_request` (rather than
+# `pull_request_target`) already means a fork's PR gets a read-only token and no
+# secrets, so this is belt and braces — but it is the sort of default that
+# drifts, and stating it costs two lines.
+permissions:
+  contents: read
+
 jobs:
   tests:
     runs-on: ubuntu-latest

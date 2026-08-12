@@ -13,8 +13,10 @@
  * with everything else — attributes, ids, indentation, script tags — untouched.
  * Publish runs whatever tests the repo has, then commits and pushes.
  *
- * It binds to 127.0.0.1 on purpose. The SSH tunnel is the access control, so
- * there is no login and nothing is reachable from the network the Pi is on.
+ * It binds to 127.0.0.1 on purpose, and that is necessary rather than
+ * sufficient: the tunnel lands it on your laptop's localhost alongside whatever
+ * you are browsing, so /api/ also wants a per-run token that only the page it
+ * serves knows. See the note above TOKEN.
  *
  * What it will not let you do: delete an element that app.js looks up by id,
  * or leave a tag unclosed. Both are checked before anything is written, and a
@@ -29,6 +31,7 @@
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { resolve, relative, basename } from "node:path";
 
 // ---------------------------------------------------------------- arguments
@@ -38,6 +41,23 @@ const portArg = argv.indexOf("--port");
 const PORT = portArg > -1 ? Number(argv[portArg + 1]) : 7000;
 const files = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--port");
 const ROOT = process.cwd();
+
+/* Binding to 127.0.0.1 is not the access control it looks like. The tunnel puts
+ * this server on your *laptop's* localhost, next to every site your browser has
+ * open, and a page on any of them can POST here: the handler parses the body
+ * whatever the content-type says, so a text/plain form post skips the CORS
+ * preflight and lands. The attacker can't read the reply, but /api/save
+ * rewrites the copy on your site and /api/publish commits and pushes it, and
+ * neither of those needs a reply to hurt.
+ *
+ * So: a per-run token, minted here and baked into the page, required on every
+ * /api/ call. A cross-origin script can't read `/` — no CORS headers — so it
+ * can't learn the token. Origin and Host are checked too, mostly so the failure
+ * is legible in the log: Host also stops DNS rebinding, where an attacker's
+ * domain resolves to 127.0.0.1 and the browser therefore thinks it is us. */
+const TOKEN = randomBytes(18).toString("hex");
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+const hostOf = (v) => String(v || "").trim().replace(/^\w+:\/\//, "").replace(/:\d+$/, "");
 
 const TARGETS = (files.length ? files : defaultTargets()).map((f) => resolve(ROOT, f));
 for (const f of TARGETS) {
@@ -376,8 +396,9 @@ function edits(){
   document.querySelectorAll(".f").forEach(function(w){ out[w.dataset.id] = w.querySelector("textarea").value; });
   return out;
 }
+var TOKEN = "${TOKEN}";
 function post(path, body){
-  return fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+  return fetch(path, { method: "POST", headers: { "content-type": "application/json", "x-copyedit-token": TOKEN }, body: JSON.stringify(body) })
     .then(function(r){ return r.json(); });
 }
 document.getElementById("save").onclick = function(){
@@ -397,7 +418,7 @@ document.getElementById("pub").onclick = function(){
 addEventListener("keydown", function(e){
   if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); document.getElementById("save").click(); }
 });
-fetch("/api/units").then(function(r){ return r.json(); }).then(render);
+fetch("/api/units", { headers: { "x-copyedit-token": TOKEN } }).then(function(r){ return r.json(); }).then(render);
 </script></body></html>`;
 
 // -------------------------------------------------------------------- server
@@ -407,10 +428,31 @@ const json = (res, body) => {
   res.end(JSON.stringify(body));
 };
 
+/* Every /api/ route goes through this. Returns null when the request is ours,
+ * or a reason string to refuse with — refusing loudly, because the only way to
+ * see this fire is to read the log. */
+function refuse(req) {
+  if (!LOCAL_HOSTS.has(hostOf(req.headers.host))) return `Host is ${req.headers.host}, not localhost`;
+  // Browsers send Origin on same-origin POSTs too, so it is normally present.
+  // Any local port is fine: `ssh -L 7100:localhost:7000` makes the page's port
+  // differ from ours, and that is a supported way to run this.
+  if (req.headers.origin && !LOCAL_HOSTS.has(hostOf(req.headers.origin))) return `Origin is ${req.headers.origin}`;
+  if (req.headers["x-copyedit-token"] !== TOKEN) return "wrong or missing token — reload the page";
+  return null;
+}
+
 const server = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end(PAGE);
+  }
+  if (req.url.startsWith("/api/")) {
+    const bad = refuse(req);
+    if (bad) {
+      console.error(`refused ${req.method} ${req.url}: ${bad}`);
+      res.writeHead(403, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ ok: false, error: `refused: ${bad}`, log: `refused: ${bad}` }));
+    }
   }
   if (req.method === "GET" && req.url === "/api/units") return json(res, payload());
   if (req.method === "POST" && (req.url === "/api/save" || req.url === "/api/publish")) {

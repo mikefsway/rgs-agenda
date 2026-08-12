@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Build one for your conference · Navigator</title>
 <meta name="description" content="Navigator is open source. Paste your conference's programme URL and this page writes the instructions to port it — hand them to Claude Code and it does the work.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<!-- Tighter than index.html's: this page loads no model, so nothing off-origin
+     runs on it and connect-src can be 'none'. build.js makes no network call by
+     design, and now the page won't let it start. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'self'; form-action 'none'; object-src 'none'">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23fbfbf9'/><rect x='5' y='8' width='22' height='3' fill='%2317191a'/><rect x='4' y='15' width='24' height='8' fill='%23ffe066'/><rect x='5' y='17' width='16' height='3' fill='%2317191a'/></svg>">
 </head>

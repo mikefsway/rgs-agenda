@@ -63,6 +63,20 @@ try {
   // than a stale-but-working page.
   ok("build.html loads", (await head(BASE + "build.html")) === 200);
   ok("build.js loads", (await head(BASE + "build.js")) === 200);
+
+  /* Two properties of the deployed page rather than of the repo, both of which
+   * fail quietly. A stray webfont link puts every visitor's IP in front of a
+   * third party on a page that promises the opposite, and a dropped CSP is
+   * invisible until the day the CDN is the problem. Checked as served, because
+   * that is the only place a half-deployed index.html shows up. */
+  const index = await (await get(BASE)).text();
+  ok("no third-party font requests", !/fonts\.(googleapis|gstatic)\.com/.test(index),
+    "index.html is loading fonts from Google again — docs/fonts/ is the local copy");
+  ok("the CSP meta tag is still there", /http-equiv="Content-Security-Policy"/.test(index));
+  ok("the self-hosted fonts are deployed",
+    (await head(BASE + "fonts/IBMPlexSans-400-latin.woff2")) === 200,
+    "the @font-face rules in style.css point at files that aren't there");
+
   const sw = await (await get(BASE + "sw.js")).text();
   info(`service worker cache ${(sw.match(/const CACHE = "([^"]+)"/) || [])[1]}`);
 } catch (e) {

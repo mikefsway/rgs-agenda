@@ -5,9 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Navigator -- your (unofficial) route through RGS-IBG 2026</title>
 <meta name="description" content="Enter your research interests and goals, and get a personalised (unofficial) guide to the sessions of the RGS-IBG Annual International Conference 2026, with reasons and alternatives. Matching runs in your browser.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<!-- This page holds the user's whole publication list and their statement of what
+     they're working on, in memory and in localStorage. So it is worth capping what
+     an injected script could do with that, and worth naming the one thing that is
+     trusted: `import()` of an ES module can't carry an integrity hash, so
+     cdn.jsdelivr.net runs with full access to the page and no way to verify it.
+     'wasm-unsafe-eval' and blob: workers are what onnxruntime-web needs to run the
+     model at all. frame-ancestors is omitted on purpose — it is ignored in a meta
+     tag, and GitHub Pages won't send headers. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co https://*.huggingface.co; manifest-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23fbfbf9'/><rect x='5' y='8' width='22' height='3' fill='%2317191a'/><rect x='4' y='15' width='24' height='8' fill='%23ffe066'/><rect x='5' y='17' width='16' height='3' fill='%2317191a'/></svg>">
 </head>

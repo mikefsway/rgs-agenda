@@ -17,6 +17,17 @@ category, domain, tags, visibility: "private"}`) and can be downloaded; see
 embeddings persist locally too, and a service worker caches the shell and
 data — so on conference wifi (or none) the page opens straight to your route.
 
+Two off-origin requests remain and neither carries your text: the library from
+jsDelivr and the model from Hugging Face, both on first visit only. Fonts are
+served from this repo rather than from Google, because a webfont link would put
+every visitor's IP address in front of a third party on a page that promises the
+opposite. A `Content-Security-Policy` meta tag caps what a compromised CDN could
+do with a page that is holding your whole publication list — worth having,
+because `import()` of an ES module can't carry an integrity hash, so jsDelivr is
+trusted rather than verified. One caveat the tool can't fix from inside: on a
+GitHub Pages user site every repo under the account shares an origin, so
+`localStorage` here is readable by other pages on the same account.
+
 ## Architecture
 
 ```
@@ -32,6 +43,7 @@ docs/                the static site (GitHub Pages serves this directory)
   data/sessions.json     593 sessions, 2,217 paper titles (1.7 MB)
   data/embeddings.bin    3,309 facets x 384 dims, float16 (2.5 MB)
   data/facets.json       row -> session mapping + evidence labels
+  fonts/                 IBM Plex, self-hosted (320 kB) — no Google Fonts call
 test/                no deps, no runner — plain node scripts
   parse.test.mjs       the Scholar parser against a real 68-article profile
   data.test.mjs        the shipped data files against each other
