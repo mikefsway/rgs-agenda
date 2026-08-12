@@ -344,13 +344,17 @@ Since 12 Aug 2026 the code lives in two places:
 - **`rgs-agenda`** — this one. The canonical example, deployed, with the
   programme in it.
 
-Everything except `README.md`, `docs/data/`, `test/monitor.mjs`'s default URL,
-`test/data.test.mjs`'s skip guard and `.github/workflows/check.yml` is identical
-in both, and **a fix to any of that has to land in both**. There is no
-submodule, no subtree and no sync script, because either would be a build step
-and this repo does not have one. What there is instead: the kit's copy is
-generated from `git ls-files` here minus `docs/data/`, so regenerating it is one
-command and a diff will show anything that has drifted.
+**Twenty-nine files are shared byte-for-byte, and a fix to any of them has to
+land in both.** Five are meant to differ — `README.md`, `CLAUDE.md`,
+`test/data.test.mjs`, `test/monitor.mjs`, `.github/workflows/check.yml` — plus
+`docs/data/`, which the kit doesn't have.
+
+`tools/sync-kit.sh` is the check: run it bare to list drift, `--write` to copy.
+It refuses to touch the five, and it prints them at the end marked "differs as
+expected", so an accidental overwrite is visible rather than silent. Verified
+by drifting a shared file and repairing it. No submodule and no subtree, because
+either is a build step and the whole shape of this project is that there isn't
+one.
 
 ## Persistence and caching — three layers, three invalidation rules
 
