@@ -32,7 +32,13 @@
 // visitor's cache. build.html and build.js landed in the same deploy but are
 // deliberately NOT in SHELL: the point of the cache is a route that opens in a
 // seminar room with no signal, and nobody needs the porting page offline.
-const CACHE = "traverse-v10";
+// v11: the HTML-entity fix of 14 Aug 2026. Same programme, same 593 sessions,
+// same row order — but 183 strings changed, so sessions.json, facets.json,
+// embeddings.bin and meta.json are again only meaningful as a set. A visitor
+// left holding the old matrix beside the new facets.json fails the order check
+// and gets no route at all, which is the loud version and still not one anybody
+// should have to see.
+const CACHE = "traverse-v11";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

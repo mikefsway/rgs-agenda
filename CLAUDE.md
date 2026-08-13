@@ -995,6 +995,31 @@ be swept up by the same brush. And `data/raw/` is untracked as of the same date:
 it is the API response verbatim, so it holds the unredacted originals, and it is
 a build input that `fetch.py` regenerates.
 
+**The API escapes every field; only one of them was being unescaped — fixed 14
+Aug 2026.** `strip_html` calls `html.unescape`, and descriptions were the only
+field that went through it, so session titles, paper titles, affiliations and
+venues shipped with literal `&amp;` and `&nbsp;` in them. Visible junk in the
+middle of a paper title on the page, and — the half that mattered more —
+embedded into the matrix that way, since `embed.py` takes paper facets from
+exactly these strings. `clean_text` now does the four, and **it runs before
+redaction, not after**: `a&#64;b.ac.uk` is an address `EMAIL` cannot see, and
+decoding it afterwards would put it back on the page.
+
+Two things about the shape of the fix. `&nbsp;` unescapes to U+00A0, which is
+not `[ \t]`, so it survives `WS` and lands in a title as an invisible reason two
+identical-looking strings aren't equal — `NBSP` is a separate substitution and
+`strip_html` needed it too, which means descriptions had been carrying U+00A0
+since the beginning as well. And the audit is the point: every one of the 183
+changed strings was checked against "does exactly one of entity-decode,
+nbsp→space, whitespace-collapse explain this", with **zero** unexplained, which
+is what rules out `html.unescape` quietly eating something like `&not` in a
+title. 26 entity decodes, 37 nbsp, 121 both. Row order identical, 593 sessions
+either side, still 0 email addresses, still 1,168 distinct affiliation strings.
+
+The cost was a full `embed.py` re-run and a `CACHE` bump to v11, which is the
+rule in "sessions.json row order is load-bearing" doing its job: the text
+changed, so the matrix had to.
+
 The API has changed shape once already (page_size now clamped to 15, `date=`
 is the only working day filter, `expand[]=` 500s — dotted comma-separated
 paths work). That loop is now `pipeline/fetch.py` rather than prose in a

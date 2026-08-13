@@ -214,6 +214,18 @@ Notes that are not obvious:
   §4).
 - **`description` must be plain text.** `strip_html` in `normalize.py` handles
   the paragraph-to-newline conversion that keeps `embed.py`'s chunker working.
+- **Unescape every text field, not just the HTML-looking one.** This one shipped
+  here for a fortnight. Only descriptions went through `strip_html`, which is
+  where the `html.unescape` call lived, so titles and affiliations kept their
+  literal `&amp;` and `&nbsp;` — visible junk mid-title on the page and, worse,
+  embedded into the matrix that way. `clean_text` does the four fields now. Two
+  details worth copying: run it **before** redaction, since `a&#64;b.ac.uk` is
+  an address the email regex cannot see; and substitute U+00A0 separately,
+  because `&nbsp;` decodes to a character that is not `[ \t]`, survives your
+  whitespace collapse and sits invisibly inside a title. When you fix this on
+  your own data, diff old against new and check that *every* changed string is
+  explained by a rule you intended — `html.unescape` will also decode things
+  like `&not` without a semicolon.
 - **Redact contact details on the way through.** `normalize.py` has
   `redact_prose` and `redact_label` for this and you should keep them. The RGS
   programme carried 21 personal email addresses — convenors writing "any

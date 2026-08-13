@@ -37,6 +37,12 @@ DAYS = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"]
 MODE_PREFIX = re.compile(r"^(IN-PERSON|IN PERSON|ONLINE|HYBRID|NO SESSION)\s*[-–—]?\s*", re.I)
 TAG = re.compile(r"<[^>]+>")
 WS = re.compile(r"[ \t]+")
+# &nbsp; unescapes to U+00A0, which is not [ \t] and so survives WS. It looks
+# exactly like a space, splits no words for a tokenizer that expects one, and
+# turns up in a title as an invisible reason two identical-looking strings
+# aren't equal. Same for the narrow and figure spaces, which appear for the
+# same reason: someone pasted out of Word.
+NBSP = re.compile("[\u00a0\u2007\u202f]")
 
 # Session codes are sponsor-group + number, e.g. GFGRG9 -> GFGRG.
 CODE_GROUP = re.compile(r"^([A-Za-z]+)")
@@ -67,6 +73,23 @@ def redact_label(s: str) -> str:
     return re.sub(r"[\s,;:\-]+$", "", AFF_EMAIL.sub("", s)).strip()
 
 
+def clean_text(s: str | None) -> str:
+    """Unescape a plain-text field from the API.
+
+    The API escapes every field, not just the HTML ones, but only descriptions
+    went through strip_html — so until 14 Aug 2026 titles and affiliations
+    shipped with literal `&amp;` and `&nbsp;` in them, 46 of them, rendered on
+    the page as visible junk in the middle of a paper title and embedded into
+    the matrix that way.
+
+    Unescape before redacting, never after: `a&#64;b.ac.uk` is an address that
+    the EMAIL pattern cannot see, and decoding it afterwards would put it back.
+    """
+    if not s:
+        return ""
+    return WS.sub(" ", NBSP.sub(" ", html.unescape(s))).strip()
+
+
 def strip_html(s: str | None) -> str:
     if not s:
         return ""
@@ -74,6 +97,7 @@ def strip_html(s: str | None) -> str:
     s = re.sub(r"<li[^>]*>", "- ", s, flags=re.I)
     s = TAG.sub(" ", s)
     s = html.unescape(s)
+    s = NBSP.sub(" ", s)
     s = WS.sub(" ", s)
     s = re.sub(r"\n\s*\n+", "\n\n", s)
     return s.strip()
@@ -94,7 +118,7 @@ def main() -> None:
         raw = json.loads((RAW / f"day_{day}.json").read_text())
         for rec in raw["data"]:
             se = rec["virtual_content"]["schedule_event"]
-            mode, title = parse_mode(se["title"] or "")
+            mode, title = parse_mode(clean_text(se["title"]))
             if mode == "none" or not title:
                 continue
             papers = []
@@ -102,10 +126,10 @@ def main() -> None:
                 p = sep.get("paper") or {}
                 if not p.get("title"):
                     continue
-                affs = sorted({redact_label(a.get("identity_string", ""))
+                affs = sorted({redact_label(clean_text(a.get("identity_string")))
                                for a in p.get("paper_authors") or [] if a.get("identity_string")})
                 affs = [a for a in affs if a]
-                papers.append({"title": p["title"].strip(), "affiliations": affs})
+                papers.append({"title": clean_text(p["title"]), "affiliations": affs})
             code = (se.get("code") or "").strip()
             group = (CODE_GROUP.match(code).group(1).upper() if code and CODE_GROUP.match(code) else "")
             sessions.append({
@@ -127,8 +151,8 @@ def main() -> None:
                 # staged in the RGS-IBG itself has virtual_venue: null and the
                 # room on virtual_stage instead. Reading only the first shows
                 # "venue tbc" on 164 sessions whose room is perfectly well known.
-                "venue": ((rec.get("virtual_venue") or {}).get("name")
-                          or (rec.get("virtual_stage") or {}).get("name") or ""),
+                "venue": clean_text((rec.get("virtual_venue") or {}).get("name")
+                                    or (rec.get("virtual_stage") or {}).get("name")),
                 "description": redact_prose(strip_html(se.get("description"))),
                 "papers": papers,
             })
