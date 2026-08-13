@@ -531,13 +531,26 @@ reasons, a hosted embedding API, analytics — **is a change to that promise, no
 an implementation detail.** If you add one, change the copy on the landing page
 in the same commit, and make it opt-in. Do not quietly keep the privacy note.
 
-**There is exactly one deliberate exception, and it is labelled.** The "copy a
-brief for your own AI" button hands the user's profile and their route to
-whatever LLM they choose, which means it does leave the device. That is fine —
-it is their LLM and their decision — and it is fine *because the copy next to
-the button says so in those words*. If you keep the feature, keep the label with
-it. A port that quietly drops the caveat while keeping the button has turned an
-honest choice into a lie, and nobody will notice until someone checks.
+**There is exactly one deliberate exception.** The "copy a brief for your own AI"
+button hands the user's profile and their route to whatever LLM they choose,
+which means it does leave the device. That is fine — it is their LLM, their
+decision, and the copying is a deliberate act they perform.
+
+This file used to require a sentence next to the button saying the text leaves
+the device. That requirement was dropped on 14 Aug 2026: **the gesture is its own
+disclosure.** You press copy in order to paste somewhere else, and nobody who
+does that is under the impression the text stayed put. The sentence was telling
+people something they had just decided.
+
+What is worth saying, if you say anything, is **what is in the payload** — that
+is the part the user cannot see. The brief carries both profile boxes verbatim,
+not just the route, and a reader who assumed it was a list of session titles
+would be wrong about it. Describe the contents; skip the geography.
+
+The line that stays either way is the one on the landing page. Adding a *silent*
+network call — telemetry, a hosted embedding API, a "share your route" link —
+is still the thing this section is about, and none of it is disclosed by any
+gesture the user makes.
 
 Three more things that are easy to keep and easy to lose:
 

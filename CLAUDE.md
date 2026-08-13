@@ -145,10 +145,23 @@ Three things about it are load-bearing:
 
 - **It is a change to the privacy promise, made by the user.** Pasting into
   Claude sends the profile to Anthropic. That is a perfectly reasonable thing to
-  choose and a completely unreasonable thing to be quiet about on this page, so
-  the caveat sits next to the button in those words rather than in a footnote.
-  It is deliberately not styled as a warning — a red box would argue against a
-  choice that is fine.
+  choose, and for a fortnight the note under the button said so in as many words
+  — *this is the one button here that sends your text off your device*.
+
+  **That sentence came out on 14 Aug 2026, and the reason is good: the action is
+  its own disclosure.** The button copies text to your clipboard so that you can
+  paste it into another tool. Nobody who completes that gesture is unaware they
+  have handed something to the tool they pasted it into, and spelling it out
+  reads as either padding or as an argument against a choice that is fine —
+  which is the same reason it was never styled as a warning.
+
+  Note what the rule was protecting, because that part still stands and is *not*
+  the transmission: a reader can see they are pasting, and cannot see **what**.
+  The brief carries both boxes verbatim — the whole publication list and the
+  statement of intent — and the note describes it as the route plus a longlist.
+  If this is ever tightened again, the thing to say is what's in the payload,
+  not where it goes. `PORTING.md` §8 carries the same correction, since a port
+  reading the old rule would keep a sentence for a reason that has changed.
 - **The shortlist is deep and tiered.** 14 per slot, not the 4 the page draws,
   because the LLM's entire job is to reach for something the cosine put ninth.
   But rank 12 of a 45-way slot is a weak match by construction, so the payload

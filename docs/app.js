@@ -1656,10 +1656,12 @@ function downloadIcs() {
  * it is cheap in tokens and gets steadily less useful — by rank 14 the sessions
  * are ones the profile barely touches.
  *
- * This is the one feature here that sends the user's text off the device, and
- * the copy next to the button says so in those words. It is their LLM and their
- * choice; it is not a thing to be quiet about on a page whose pitch is the
- * opposite. */
+ * This is the one feature here that sends the user's text off the device. The
+ * note under the button used to say so outright; that came out on 14 Aug 2026,
+ * because copying in order to paste elsewhere is its own disclosure and the
+ * sentence was telling people what they had just decided to do. What is still
+ * worth saying — and what the note does say — is what the payload contains,
+ * since that is the half they can't see. Both boxes go in verbatim. */
 const SHORTLIST_PER_SLOT = 14;
 
 /* Three tiers, because the deep end of the shortlist is there to be *noticed*,
