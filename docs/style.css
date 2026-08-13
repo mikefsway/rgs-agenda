@@ -592,7 +592,10 @@ footer p { margin: 0 0 0.5rem; max-width: 38rem; }
   .view-tabs, .route-actions, #view-papers, #view-people, #view-lookup,
   .llm-note, #llm-hint,
   .pick-controls, .hidden-note, details.alts, details.contents, .build-yours,
-  .match-bar, #restored-note, .tagline { display: none !important; }
+  /* A printed route is a snapshot, so the staleness of the one on screen is not
+     information about the paper in your hand. The flags are: "you are presenting
+     in this" is exactly what a printout is for. */
+  .match-bar, #restored-note, #stale-note, .tagline { display: none !important; }
   #view-route[hidden], #results[hidden] { display: block !important; }
   .slot { padding-top: 0.5rem; break-inside: avoid; }
   .slot-body { padding-bottom: 0.5rem; }

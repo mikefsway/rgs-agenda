@@ -582,7 +582,7 @@ function instNeedles(raw) {
      * all — "University of" would otherwise phrase-match half the programme. */
     const sig = instNorm(s).trim().split(" ").filter((w) => w && !INST_STOP.has(w));
     const phrase = words.length >= 2 && sig.length >= 1 ? instNorm(s) : "";
-    return { raw: s, acronyms, full: instNorm(s), phrase };
+    return { acronyms, full: instNorm(s), phrase };
   });
 }
 
