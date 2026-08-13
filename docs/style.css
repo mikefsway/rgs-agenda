@@ -357,6 +357,14 @@ body.working #status::before {
 
 .restored-note { color: var(--ink-2); margin: 1rem 0 0; }
 
+/* A route that no longer matches the boxes above it. Ink on a hairline rule, not
+   yellow and not red: yellow means "this is the one" and nothing here is wrong —
+   the route is simply older than the profile. */
+.stale-note {
+  margin: 1rem 0 0; padding: 0.5rem 0 0.5rem 0.75rem;
+  border-left: 2px solid var(--ink); font-size: 0.92rem; max-width: 46rem;
+}
+
 .route-actions {
   display: flex; justify-content: space-between; align-items: center;
   gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;
@@ -430,6 +438,9 @@ body.working #status::before {
 .evidence li { margin: 0.25rem 0; color: var(--ink-2); }
 .evidence .why { color: var(--ink); }
 .evidence .q { font-style: italic; }
+/* The hedge on a two-quote credit. Deliberately quieter than the quotes it
+   qualifies — it is a caveat on the line, not a second finding. */
+.evidence .q-close, .paper-why .q-close { font-size: 0.85em; color: var(--ink-2); font-style: normal; }
 
 /* a clash is two candidates, neither decided — so neither is marked */
 .clash-note { font-size: 0.9rem; color: var(--ink-2); margin: 0 0 0.7rem; }

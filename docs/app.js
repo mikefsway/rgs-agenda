@@ -563,6 +563,36 @@ const EV_MIN = 0.35;
  * second pass in scoreSessions for why that distinction is the whole ballgame. */
 const DUAL_PCTL = 0.97;
 
+/* Below this margin, the evidence line may not name one paper.
+ *
+ * `Matches paper "X" — from your paper "Y"` reads as a claim that X and Y are
+ * about the same thing. The model made a far weaker claim than that. Measured on
+ * the real 67-title fixture against the shipped matrix: an arbitrary pair of
+ * titles in this corpus scores 0.571 ± 0.058 and a *winning* pair scores 0.666,
+ * so a match is about 1.6 sd above two papers with nothing in common — and on the
+ * facets we actually quote (the profile's top 1%), the winner is within 0.02 of
+ * the runner-up **53% of the time** and the top three are within 0.03 on 56%. So
+ * more often than not the paper we name is ahead by a coin toss, and a reader who
+ * asks "why that one?" is asking a question the number cannot answer.
+ *
+ * A percentile of the box's own gap distribution, not a float — the gaps are
+ * differences of cosines and sit in the same narrow corpus-dependent band the
+ * cosines do. At the median it means "this winner is no more clearly ahead than
+ * this profile's typical winner", which is exactly when it should not be singled
+ * out. Naming two is the honest output; it is also more information, not less. */
+const MARGIN_PCTL = 0.5;
+
+/* The gap this box needs before its winning chunk is worth naming on its own.
+ * -Infinity (nothing is too close) when the pool has no runners-up to measure —
+ * a single-chunk box is already handled by `sole`. */
+function marginFloor(best) {
+  const gaps = [];
+  for (let f = 0; f < best.sim.length; f++) {
+    if (best.which2[f] >= 0) gaps.push(best.sim[f] - best.second[f]);
+  }
+  return gaps.length ? percentile(gaps, MARGIN_PCTL) : -Infinity;
+}
+
 function percentile(values, p) {
   if (!values.length) return Infinity;
   const sorted = Float64Array.from(values).sort();
@@ -598,9 +628,13 @@ function creditFor(f, sources) {
   const from = [];
   for (const src of sources) {
     if (src.rank[f] >= EV_MIN && src.best.which[f] >= 0) {
+      // Only worth naming one chunk when one is clearly ahead — see MARGIN_PCTL.
+      const runnerUp = src.best.which2[f];
+      const close = runnerUp >= 0 && (src.best.sim[f] - src.best.second[f]) < src.margin;
       from.push({
         label: src.quoteLabel,
         chunk: src.chunks[src.best.which[f]],
+        chunk2: close ? src.chunks[runnerUp] : null,
         sim: src.rank[f],
         // A quote is there to say *which* of your lines matched. A box holding a
         // single chunk has no which — quoting it just reprints the same sentence
@@ -613,9 +647,15 @@ function creditFor(f, sources) {
 }
 
 // "your paper “X”" when the quote identifies something, plain "your aims" when the
-// box only holds one line and the quote would be noise.
+// box only holds one line and the quote would be noise. Two quotes when neither
+// is clearly the match — naming one of them would be inventing a precision the
+// cosine doesn't have.
 function creditHtml(c) {
-  return c.sole ? esc(c.label) : `${esc(c.label)} <span class="q">“${esc(trunc(c.chunk, 80))}”</span>`;
+  if (c.sole) return esc(c.label);
+  const q = (s) => `<span class="q">“${esc(trunc(s, 80))}”</span>`;
+  return c.chunk2
+    ? `${esc(c.label)} ${q(c.chunk)} or ${q(c.chunk2)} <span class="q-close">(too close to separate)</span>`
+    : `${esc(c.label)} ${q(c.chunk)}`;
 }
 
 /* The papers closest to you, whatever session they happened to land in.
@@ -754,23 +794,28 @@ function buildPeople(results, facets, facetScore, sessions, allowed) {
  * it is driving the agenda, while removing it changes nothing — its neighbour
  * steps up. `gap` (best minus second-best) is what separates a paper that is
  * merely credited from one that is actually carrying the match. Measured: this
- * is not a hypothetical, see the concentration line's numbers in CLAUDE.md. */
+ * is not a hypothetical, see the concentration line's numbers in CLAUDE.md.
+ *
+ * `which2` is the runner-up's index, kept for the same reason the score is: when
+ * the gap is small the evidence line has no business naming one paper, and to
+ * name two you need to know which two. */
 function bestPerFacet(vecs) {
   const { facets, matrix, dim } = DATA;
   const sim = new Float32Array(facets.length);
   const second = new Float32Array(facets.length);
   const which = new Int16Array(facets.length).fill(-1);
+  const which2 = new Int16Array(facets.length).fill(-1);
   for (let q = 0; q < vecs.length; q++) {
     const qv = vecs[q];
     for (let f = 0; f < facets.length; f++) {
       let dot = 0;
       const off = f * dim;
       for (let k = 0; k < dim; k++) dot += matrix[off + k] * qv[k];
-      if (dot > sim[f]) { second[f] = sim[f]; sim[f] = dot; which[f] = q; }
-      else if (dot > second[f]) second[f] = dot;
+      if (dot > sim[f]) { second[f] = sim[f]; which2[f] = which[f]; sim[f] = dot; which[f] = q; }
+      else if (dot > second[f]) { second[f] = dot; which2[f] = q; }
     }
   }
-  return { sim, second, which };
+  return { sim, second, which, which2 };
 }
 
 function scoreSessions(profile, filters) {
@@ -781,6 +826,8 @@ function scoreSessions(profile, filters) {
   const G = { ...profile.goals, best: bestPerFacet(profile.goals.vecs) };
   W.rank = toRanks(W.best.sim);
   G.rank = toRanks(G.best.sim);
+  W.margin = marginFloor(W.best);
+  G.margin = marginFloor(G.best);
 
   /* Blend as a weighted *geometric* mean of the two ranks, because the point of
    * asking twice is agreement.
@@ -1020,7 +1067,7 @@ function buildAgenda(results, prefs) {
  * re-embed, no network. Only ids and display strings are stored; sessions are
  * re-joined to the freshly loaded programme, and a changed dataSig discards
  * the lot rather than showing a route built from data that no longer exists. */
-const slimCredit = ({ label, chunk, sole }) => ({ label, chunk, sole });
+const slimCredit = ({ label, chunk, chunk2, sole }) => ({ label, chunk, chunk2, sole });
 
 /* Identity of the input that produced a route. djb2 over both boxes — not for
  * security, just so a saved route can prove it belongs to the profile on screen
@@ -1121,7 +1168,7 @@ function evidenceHtml(ev) {
     const what = e.kind === "paper" ? `paper “${esc(trunc(e.label, 90))}”` : "the session theme";
     const parts = [];
     for (const f of e.from) {
-      const key = `${f.label}|${f.chunk}`;
+      const key = `${f.label}|${f.chunk}|${f.chunk2 ?? ""}`;
       if (seen.has(key)) continue;   // don't quote the same line of input twice
       seen.add(key);
       parts.push(creditHtml(f));
@@ -1385,7 +1432,12 @@ function icsFold(line) {
 function evidenceText(r) {
   return r.evidence.map((e) => {
     const what = e.kind === "paper" ? `paper "${e.label}"` : "the session theme";
-    const from = e.from.map((f) => (f.sole ? f.label : `${f.label} "${trunc(f.chunk, 60)}"`)).join(" and ");
+    const from = e.from.map((f) => {
+      if (f.sole) return f.label;
+      return f.chunk2
+        ? `${f.label} "${trunc(f.chunk, 60)}" or "${trunc(f.chunk2, 60)}" (too close to separate)`
+        : `${f.label} "${trunc(f.chunk, 60)}"`;
+    }).join(" and ");
     return `Matches ${what}${from ? ` — from ${from}` : ""}`;
   }).join("\n");
 }
@@ -1710,6 +1762,34 @@ function renderRoute() {
   return markNowNext();
 }
 
+/* Does the route on screen still describe the controls above it?
+ *
+ * Nothing on this page re-charts on its own — the button is the one thing that
+ * commits, and that is deliberate, because re-embedding a profile costs ten
+ * seconds and nobody wants it to happen while they type. What was missing is the
+ * other half of that bargain: until this existed, unticking a paper or changing
+ * the year updated the panel, changed nothing else, and said nothing, so a route
+ * could sit under controls it had never seen. The LLM brief made it worse rather
+ * than visible — it is built from STATE.worksPick, so it went on faithfully
+ * describing the previous run's filters while the boxes on screen said otherwise,
+ * which reads as the brief ignoring the filters rather than the route being old.
+ *
+ * Days and mode count too: they are read at scoring time, so changing them after
+ * a chart is the same silent no-op. */
+function routeIsStale() {
+  if (!STATE) return false;
+  const sig = profileSig($("#works").value.trim(), $("#goals").value.trim(), worksFilter);
+  if (sig !== STATE.profileSig) return true;
+  if (document.querySelector('input[name="mode"]:checked').value !== STATE.filters.mode) return true;
+  const days = [...document.querySelectorAll('input[name="day"]:checked')].map((i) => i.value);
+  return days.length !== STATE.filters.days.size || days.some((d) => !STATE.filters.days.has(d));
+}
+
+function refreshStale() {
+  const el = $("#stale-note");
+  if (el) el.hidden = !routeIsStale();
+}
+
 function renderAll({ restored = false, scroll = false } = {}) {
   const nowSlot = renderRoute();
   renderOverview();
@@ -1726,6 +1806,7 @@ function renderAll({ restored = false, scroll = false } = {}) {
   }
 
   $("#results").hidden = false;
+  refreshStale();
   if (nowSlot) nowSlot.scrollIntoView({ behavior: "smooth", block: "center" });
   else if (scroll) $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -2037,8 +2118,17 @@ $("#llm-btn").addEventListener("click", (e) => copyBrief(e.currentTarget));
 let noteTimer = null;
 $("#works").addEventListener("input", () => {
   clearTimeout(noteTimer);
-  noteTimer = setTimeout(refreshWorksNote, 250);
+  // refreshWorksNote prunes exclusions whose title no longer parses out of the
+  // box, which moves the signature — so staleness is re-read after it, not before.
+  noteTimer = setTimeout(() => { refreshWorksNote(); refreshStale(); }, 250);
 });
+
+/* One delegated pair for every control in the panel — textareas, the year select,
+ * both kinds of checkbox, the mode radios. Cheaper to read than five call sites
+ * kept in step, and it cannot miss a control added later. Bubbling puts it after
+ * the specific handlers, so worksFilter is already updated when this runs. */
+$("#profile-panel").addEventListener("input", refreshStale);
+$("#profile-panel").addEventListener("change", refreshStale);
 
 // Both controls re-render the note (counts, the "led" tags, each other's
 // option labels) and nothing else. Changing one does not re-chart: the works

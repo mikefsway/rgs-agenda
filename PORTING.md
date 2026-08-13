@@ -433,6 +433,19 @@ account; this is the short form.
   the paper that wins 20% of the real fixture leaves the top 20 sessions
   identical, because facet scores are ranks and a cluster protects its own
   ordering. Unticking bites when the paper is an isolated pocket in the profile.
+- **Don't name one paper in the evidence line unless it is clearly ahead.**
+  Measured on the real fixture: an arbitrary pair of titles in the corpus scores
+  0.571 ± 0.058 and a winning pair 0.666, so a "match" is 1.6 sd above two papers
+  with nothing in common — and on the facets that get quoted, the winner is
+  within 0.02 of the runner-up 53% of the time. `Matches paper X — from your
+  paper Y` reads as a claim of topical identity that the model never made. Name
+  two when the gap falls under a percentile of the box's own gap distribution.
+- **Say when the route is older than the profile.** Nothing here re-charts on
+  its own — re-embedding costs ten seconds, so the button commits and the
+  controls don't. The other half of that bargain is a stale marker; without one,
+  a filter change updates the panel, changes nothing else, and the LLM brief goes
+  on describing the previous run, which reads as the brief ignoring the filters.
+  Include days and mode, and make it clear when the control is put back.
 - **Threshold the min of two ranks, never each independently.** The dual-match
   badge was `worksHit >= p97 && goalsHit >= p97`, which reads as "top 3%" and
   is nearer 0.1% because the ranks are only loosely correlated. It fired on 0

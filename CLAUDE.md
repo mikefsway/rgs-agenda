@@ -342,6 +342,78 @@ this corpus, so a percentile can never report that the corpus is wrong for you.
 Calibrating the profile's match distribution against how well the programme's
 facets match *each other* might reach it. Untested.
 
+## The evidence line overclaimed, and the route lied about its own age — 14 Aug 2026
+
+Second round of user feedback, and the two complaints turned out to be one
+problem wearing two hats: the tool was making statements about itself that its
+own numbers didn't support.
+
+**A cosine "match" is 1.6 sd above two papers with nothing in common, and the
+line read as if it were identity.** The complaint was two pairings nobody could
+explain — *The future of mangrove-shrimp farming in Viet Nam* credited to a paper
+on the environmental sustainability of digital communication, and *Deriving
+activity spaces from mobile surveys* credited to *(Re-)locating 'place' in energy
+demand*. Both look like the model confusing a topic with a framing word
+("future", "environmental"; "space" and "place"), and they are — but the useful
+half is the measurement, made on the real fixture against the shipped matrix:
+
+- An arbitrary pair of titles in this corpus scores **0.571 ± 0.058**. A
+  *winning* pair — best of 67 titles — scores **0.666** at the median. So a match
+  is about **1.6 sd** above two papers with nothing to do with each other. Nothing
+  in a bge cosine ever says "these are about the same thing".
+- Worse for the *naming*: on the facets that actually get quoted (the profile's
+  top 1%), the winner is within 0.02 of the runner-up **53% of the time**, and the
+  top three are within 0.03 on **56%**. Corpus-wide it is 46% within 0.01. The
+  paper the line named was ahead by a coin toss more often than not, and a reader
+  asking "why that one?" was asking a question the number could not answer.
+- Hubness is *not* the explanation, which is worth knowing because it is the
+  obvious guess. Each facet's mean cosine to the whole corpus puts mangrove-shrimp
+  at the **11th percentile** — one of the more specific things in the programme —
+  and activity-spaces at the 67th. And by the winner-distinctiveness measure
+  (winner's z over the profile's own spread on that facet) the two complained-of
+  pairings sit at the **85th and 72nd percentile**: they are *better than typical*.
+  The user was not shown an anomaly. He was shown what a normal match looks like
+  when you name one paper and don't say by how much.
+
+So `bestPerFacet` now carries `which2` alongside `second`, and `creditFor` names
+two chunks whenever the gap falls below `MARGIN_PCTL` of that box's own gap
+distribution — the same relative-not-absolute rule as everywhere else, applied to
+a difference of cosines because those sit in the same narrow band the cosines do.
+At the median it means "no more clearly ahead than this profile's typical
+winner", which is exactly when a single name is invention. **38% of evidence
+lines on the real fixture now name two**, and the phrasing borrows the clash
+line's words — *too close to separate* — because it is the same admission.
+
+Note what this does *not* do: it changes no score, no rank and no pick. It is a
+change to what the tool claims, not to what it chose. The scoring-side fixes for
+the same underlying problem (per-chunk percentile, the facet-count PIT) are still
+unbuilt and still need the before/after protocol.
+
+**A route could sit under controls it had never seen.** The other complaint was
+"the AI brief doesn't reflect the filtering options". The brief was fine — it has
+disclosed the works subset since the filters shipped. What was broken is that
+*nothing re-charts on its own*, deliberately, and until now nothing said so: the
+year select, the first-author box, the checkboxes, the day boxes and the mode
+radios all updated the panel and stopped. The brief is built from
+`STATE.worksPick`, so it went on faithfully describing the previous run while the
+controls on screen said otherwise — which reads exactly like the brief ignoring
+the filters rather than the route being older than the profile.
+
+`routeIsStale` compares `profileSig` plus days and mode against the run that
+produced `STATE`, and `#stale-note` says so. Three things about it:
+
+- **It is not a latch.** Put the control back and the note goes away. A stale
+  marker that can only be cleared by re-charting trains people to ignore it.
+- **Days and mode are in the check**, not just the profile. They are read at
+  scoring time, so changing them after a chart is the same silent no-op, and it
+  is a much easier one to hit than the works filters.
+- **The button text is left alone.** Flipping it to "Re-chart my route" from JS
+  would put a string in `app.js` that `copyedit.mjs` believes lives in
+  `index.html`, and the tool would silently stop being able to edit it.
+
+The listener is a delegated `input`/`change` pair on `#profile-panel` rather than
+five call sites kept in step, so a control added later cannot forget to join.
+
 ## Checks — what each one is actually for
 
 ```
