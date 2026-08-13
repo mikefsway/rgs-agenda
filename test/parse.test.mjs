@@ -134,6 +134,42 @@ group("real Google Scholar profile (test/fixtures/scholar-profile.txt)");
     JSON.stringify(children?.authors));
 }
 
+// ------------------------------------------------------- institution detection
+
+group("institution read off the profile card");
+{
+  const fixture = readFileSync(join(here, "fixtures/scholar-profile.txt"), "utf8");
+  const { institution } = parseWorks(fixture);
+  check("affiliation taken from the line above the verified email",
+    institution?.name === "UCL Energy Institute", JSON.stringify(institution));
+  check("domain reduced to its distinctive label", institution?.domain === "ucl");
+
+  /* The card is name / name / affiliation / verified-email, and a profile with
+   * no affiliation set is name / name / verified-email. Shape can't tell them
+   * apart — isNamePart reads "UCL Energy Institute" as a name, three tokens with
+   * the first three capitals, exactly the shape of "MJ Fell" — so the check is
+   * whether the line above is the repeated name. */
+  const noAff = ["Cited by", "All", "Ann Other", "Ann Other",
+    "Verified email at exeter.ac.uk - Homepage", "Geography",
+    "Title", "Cited by", "Year",
+    "A paper about something reasonably interesting", "A Other",
+    "Journal of Things 1 (2), 3-4", "10\t2021"].join("\n");
+  const bare = parseWorks(noAff).institution;
+  check("no affiliation on the card reads as null, not as the owner's name",
+    bare?.name === null, JSON.stringify(bare));
+  check("the domain still comes through", bare?.domain === "exeter");
+
+  // Co-author cards have the identical name/name/affiliation shape and end in
+  // "Following". Only the verified-email anchor separates the owner from them.
+  check("co-author affiliations above the card are not taken",
+    institution?.name !== "University of Exeter");
+
+  const noEmail = noAff.replace("Verified email at exeter.ac.uk - Homepage", "Following");
+  check("no anchor means no guess", parseWorks(noEmail).institution === null);
+  check("prose profiles carry no institution",
+    parseWorks("I am a geographer working on energy and cities.").institution === null);
+}
+
 // ------------------------------------------------------------ owner detection
 
 group("owner detection refuses to guess rather than guessing wrong");

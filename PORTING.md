@@ -446,6 +446,20 @@ account; this is the short form.
   a filter change updates the panel, changes nothing else, and the LLM brief goes
   on describing the previous run, which reads as the brief ignoring the filters.
   Include days and mode, and make it clear when the control is put back.
+- **A flag is not a score.** "I'm presenting in this" and "someone from my
+  institution" annotate; the first also promotes a session within its slot,
+  because a talk you are giving has to appear whatever it matched. Neither is in
+  `profileSig` and neither must ever become a weight — the moment a flag moves a
+  cosine you have a second, invisible ranking. Keep them in their own
+  localStorage keys so they outlive the route, which is discarded on any profile
+  change.
+- **Match an institution on whole phrases and acronyms, never a shared word.**
+  "University College London" and "King's College London" have two tokens in
+  common and are different places. Take a comma-separated list, because no single
+  string catches every spelling a programme uses (here: the acronym finds 90
+  papers, the long form 113, and they overlap only partly), and print the count
+  next to the box — a value that matches nothing looks exactly like one that
+  works.
 - **Threshold the min of two ranks, never each independently.** The dual-match
   badge was `worksHit >= p97 && goalsHit >= p97`, which reads as "top 3%" and
   is nearer 0.1% because the ranks are only loosely correlated. It fired on 0

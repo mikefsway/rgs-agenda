@@ -88,9 +88,17 @@ What replaced it is deliberately plainer, and the plainness has rules:
 
 - **Yellow means "this is the one."** Full highlighter on a pinned pick, pale on
   the tool's own suggestion, none on either half of an undecided clash, plus the
-  current tab and the wordmark. It is the only colour besides ink and link blue,
-  and its meaning is the reason it is legible. Adding a second yellow thing that
-  doesn't mean "chosen" is what will break this.
+  current tab and the wordmark. Its meaning is the reason it is legible. Adding a
+  second yellow thing that doesn't mean "chosen" is what will break this.
+- **There is exactly one other colour, added 14 Aug 2026, and it is red.** `--flag`
+  marks a session the user has said they are presenting in. It earns the exception
+  by making a statement yellow cannot: *you have an obligation at this hour*, which
+  is not a stronger recommendation but a different kind of claim. It fires once or
+  twice in a whole week, and it is the only line on the page whose cost of being
+  missed is real — walking into someone else's session at the hour you were meant
+  to be in the room. **The terms of the exception are that it never means anything
+  else.** A second red thing and both colours stop working. (The session also takes
+  the full highlighter, because it is a decision, not a suggestion.)
 - **Times live in a gutter** (`.slot` is a two-column grid). The route is a
   timetable; the sequence is real information, so it gets structure. The old
   dashed route line with circular waypoints encoded nothing the times don't.
@@ -434,6 +442,74 @@ produced `STATE`, and `#stale-note` says so. Three things about it:
 
 The listener is a delegated `input`/`change` pair on `#profile-panel` rather than
 five call sites kept in step, so a control added later cannot forget to join.
+
+## Two flags that don't touch the scoring — built 14 Aug 2026
+
+Third round of feedback, and the request underneath all of it was the same: *I go
+to talks because of the topic, or to support the person.* The tool only did the
+first. Neither of these changes a score, a rank or a threshold; they annotate, and
+one of them promotes.
+
+**What the data can and cannot support here, because it is the opposite of the
+obvious guess.** Paper *author names* are withheld by the Ex Ordo API on purpose
+(re-probed 11 Aug; ask for them and the rows vanish), so "this talk is by one of
+your co-authors" is not derivable for presenters and "your name is on a paper in
+this session" is not derivable at all. Paper *affiliations* are shipped already —
+2,217 papers, 1,168 distinct strings, UCL on 89 — so "someone from my university",
+which the user guessed would be the hard one, needs no new data. Convenor names
+*are* public (747 people across 539 sessions) and would make a co-author flag
+possible for chairs and organisers only; that is still parked behind the same
+question the email redaction answered no to.
+
+**"I'm presenting in this" is asked for, never inferred, and it outranks the
+ranking.** There is nothing to match on, so the user marks it — from the route or,
+crucially, from the Look up tab, which is the only route to a session the day
+filters excluded. In `buildAgenda` a marked session becomes its slot's pick and
+overrules "weak" exactly as a pin does, because a poor match is *precisely* when
+this needs saying. An explicit pin still wins: that is a later, louder instruction
+from the same person. It is read off `list`, not `live`, so a dismissed session is
+still promoted — which is why the controls collapse to just "Not mine after all"
+on a marked session. "Not this one" there would appear to do nothing.
+
+**Both live in their own localStorage keys and outside `profileSig`.** They must
+outlive a re-chart: a route is discarded whenever the profile changes, and "I am
+speaking at 09:00 on Wednesday" should not evaporate because someone edited their
+goals box. Folding them into `profileSig` would also throw away a good route to
+record a change that moved no score. Verified by re-charting against a completely
+different goals box: the mark survived and re-promoted.
+
+**The institution matcher is deliberately conservative, because the two errors
+are not symmetrical.** A false positive tells someone a stranger is a colleague; a
+false negative just leaves a session unflagged. So `instMatches` matches whole
+phrases and acronyms and never a shared ordinary word — "University College
+London" and "King's College London" have two tokens in common and are different
+places. Measured against the real affiliations:
+
+- `UCL` → 2 affiliation strings, 90 papers, 69 sessions.
+- `University College London` → 5 strings, 113 papers, 84 sessions — it catches
+  "The Bartlett, University College London", which the acronym cannot, and misses
+  "UCL Institute for Innovation and Public Purpose", which the acronym catches.
+- Both together → 6 strings, 114 papers, 85 sessions.
+
+So no single string is right, the field takes a list, and **the count next to the
+box is the whole safety mechanism** — the same reason `detectOwner` prints the
+name it inferred. A value that catches nothing is indistinguishable from a value
+that works until you are told which.
+
+Two traps inside it. The phrase is the *whole* normalised string, not its
+distinctive words: "University College London" has exactly one word that
+identifies anyone, and that word is shared with three other institutions here,
+but the full phrase is unambiguous. The stoplist is there to refuse a needle with
+no content at all — "University of" would otherwise phrase-match 59% of the
+programme. And `detectInstitution` reads the affiliation off the profile card
+positionally, anchored on "Verified email at …", because that string is what
+separates the owner's card from the co-author cards stacked above it, which have
+the identical name/name/affiliation shape. Shape is no use: `isNamePart` reads
+"UCL Energy Institute" as a name — three tokens, first one three capitals, the
+exact shape of "MJ Fell".
+
+Both flags reach the brief: §1 names the institution and lists the sessions the
+user is presenting in, and the rules tell the model those hours are fixed.
 
 ## Checks — what each one is actually for
 

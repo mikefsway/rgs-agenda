@@ -37,6 +37,16 @@ const FRAGLET_KEY = "traverse.rgs2026.fraglet";
 // route charted from anyone's (or a broken backend's) input restored as yours.
 const ROUTE_KEY = "traverse.rgs2026.route.v2";
 
+/* Sessions the user has said they are presenting in, and the institution they
+ * want flagged. Both are their own keys rather than fields on the route,
+ * because both must outlive a re-chart: a route is discarded whenever the
+ * profile changes, and "I am speaking at 14:40 on Thursday" is not something
+ * that should evaporate because someone edited their goals box. Neither feeds
+ * profileSig for the same reason — they change what the page says, never what
+ * it scored, and folding them in would throw away a perfectly good route. */
+const MINE_KEY = "traverse.rgs2026.mine.v1";
+const INST_KEY = "traverse.rgs2026.inst.v1";
+
 // RGS-IBG research group codes (session-code prefixes) to official names.
 // POPGRGE is PopGRG's evening social, not a separate group.
 const GROUP_NAMES = {
@@ -498,6 +508,98 @@ function worksSig(works) {
   let h = 5381;
   for (let i = 0; i < works.length; i++) h = ((h * 33) ^ works.charCodeAt(i)) >>> 0;
   return h.toString(36);
+}
+
+/* ---------- two flags that don't touch the scoring ----------
+ *
+ * Both answer the same question, which is the one the ranking can't: I go to
+ * talks because of the topic *or* because of the person. Neither changes a
+ * score. `mine` promotes a session within its slot, because a talk you are
+ * presenting in has to appear whatever it scored — that is the entire point of
+ * marking it — and the institution flag is pure annotation.
+ */
+let mine = new Set();
+let instRaw = "";
+let INST = [];      // instNeedles(instRaw), rebuilt on edit rather than per session
+
+// Words that identify nobody. Everything here is a descriptor that dozens of
+// institutions share; "university" alone is in 59% of the programme's 1,168
+// affiliation strings, so matching on it would flag the whole conference.
+const INST_STOP = new Set(["university", "universite", "universitat", "universidad", "universita",
+  "of", "the", "and", "for", "de", "der", "des", "du", "la", "le", "el",
+  "college", "institute", "institut", "school", "department", "dept", "faculty",
+  "centre", "center", "research", "group", "unit", "laboratory", "lab", "studies"]);
+
+const instNorm = (s) => ` ${s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+
+/* Does one programme affiliation belong to the user's institution?
+ *
+ * Deliberately conservative, because the two errors are not symmetrical: a false
+ * positive tells someone a stranger is a colleague, which is worse than useless,
+ * while a false negative just leaves a session unflagged. So this matches on
+ * whole phrases and on acronyms, never on a shared ordinary word — "University
+ * College London" and "King's College London" have two tokens in common and are
+ * different places. It is why the field takes a list: no single string catches
+ * both "University College London (UCL)" and "UCL Institute for Innovation",
+ * and the user can see the count and add another.
+ *
+ * Consequence worth knowing: "The Bartlett, University College London" is caught
+ * by the long form and not by the acronym, and "UCL Institute…" the other way
+ * round. Hence the count next to the box — a wrong or thin value is visible
+ * immediately, the same reason detectOwner prints the name it inferred. */
+function instMatches(aff, needles) {
+  if (!needles.length || !aff) return false;
+  const a = instNorm(aff);
+  return needles.some((n) => {
+    if (n.acronyms.some((k) => a.includes(` ${k} `))) return true;
+    // Phrase containment either way: a paste may be longer than the programme's
+    // string ("Bartlett School …, University College London") or shorter.
+    if (!n.phrase) return false;
+    return a.includes(n.phrase) || (a.trim().split(" ").length >= 2 && n.full.includes(a));
+  });
+}
+
+/* Parse the "flag talks from" box into matchable needles.
+ *
+ * An acronym is any token that survives the stoplist and is either written in
+ * capitals ("UCL", "LSE", "MIT") or is the distinctive label of the verified
+ * email domain — which is the one part of a Scholar profile that is an
+ * identifier rather than free text. A one-word entry ("Exeter") is treated as an
+ * acronym too, since a single word is exactly how you name a place informally. */
+function instNeedles(raw) {
+  return raw.split(/[,;]+/).map((s) => s.trim()).filter(Boolean).map((s) => {
+    const words = s.split(/\s+/);
+    const acronyms = words
+      .filter((w) => /^[A-Za-z][A-Za-z0-9.&-]*$/.test(w))
+      .filter((w) => w === w.toUpperCase() || words.length === 1)
+      .map((w) => w.toLowerCase().replace(/[^a-z0-9]+/g, ""))
+      .filter((w) => w.length >= 2 && !INST_STOP.has(w));
+    /* The phrase is the whole normalised string, not its distinctive words:
+     * "University College London" has exactly one word that identifies anyone
+     * ("london", and that one is shared with three other institutions here), but
+     * the full phrase is unambiguous and does not appear inside "King's College
+     * London". What the stoplist is for is refusing a needle with no content at
+     * all — "University of" would otherwise phrase-match half the programme. */
+    const sig = instNorm(s).trim().split(" ").filter((w) => w && !INST_STOP.has(w));
+    const phrase = words.length >= 2 && sig.length >= 1 ? instNorm(s) : "";
+    return { raw: s, acronyms, full: instNorm(s), phrase };
+  });
+}
+
+/* How much of a session is from the user's institution. `n` counts papers and
+ * `affs` the distinct strings they arrived under, because the programme spells
+ * one place several ways ("University College London", "The Bartlett, University
+ * College London") and the flag reads better naming one than listing four.
+ * Empty when the box is empty, which is the default and costs nothing. */
+function instHits(sess) {
+  if (!INST.length) return { n: 0, affs: [] };
+  const affs = new Set();
+  let n = 0;
+  for (const p of sess.papers || []) {
+    const hit = (p.affiliations || []).filter((a) => instMatches(a, INST));
+    if (hit.length) { n++; hit.forEach((a) => affs.add(a)); }
+  }
+  return { n, affs: [...affs] };
 }
 
 function buildProfile(worksRaw, goalsRaw, filter = WORKS_FILTER_NONE) {
@@ -1018,23 +1120,31 @@ function buildAgenda(results, prefs) {
     // A pin is the user overruling the ranking; it also overrules "weak".
     const pinnedId = choices.get(key);
     const pinned = pinnedId != null ? list.find((r) => r.session.id === pinnedId) : null;
-    const weak = !pinned && (norm(ranked[0].score) < WEAK_REL || !substantive.length);
+    /* A session the user is presenting in outranks the scoring, and overrules
+     * "weak" exactly as a pin does. "Tell me when my own talk is" is not a
+     * recommendation, and a poor match is precisely when it needs saying — the
+     * whole failure being guarded against is walking into someone else's session
+     * at the hour you were meant to be in the room. An explicit pin still wins:
+     * that is a later and louder instruction from the same person. */
+    const own = pinned ? null : list.find((r) => mine.has(r.session.id)) || null;
+    const weak = !pinned && !own && (norm(ranked[0].score) < WEAK_REL || !substantive.length);
     // Infinity, not 0, for a one-session slot: no runner-up means no contest, and it
     // must not count as the closest call of the day.
     const gap = ranked.length > 1 ? ranked[0].score - ranked[1].score : Infinity;
-    return { key, day, list, ranked, pinned, weak, gap, hidden: list.length - live.length };
+    return { key, day, list, ranked, pinned, own, weak, gap, hidden: list.length - live.length };
   });
 
   // Second pass: "closest" only means something once every gap is known. Measure
   // over the real decisions — weak slots aren't ones you're choosing in, and a
   // pinned slot has already been decided.
-  const gaps = prepared.filter((p) => !p.weak && !p.pinned && p.gap < Infinity).map((p) => p.gap);
+  const gaps = prepared.filter((p) => !p.weak && !p.pinned && !p.own && p.gap < Infinity).map((p) => p.gap);
   const clashMax = gaps.length >= CLASH_MIN_SLOTS ? percentile(gaps, CLASH_PCTL) : -Infinity;
 
   const days = new Map();
   for (const p of prepared) {
-    const clash = !p.pinned && !p.weak && p.gap <= clashMax;
-    const top = p.pinned || p.ranked[0];
+    // No clash card over a decided slot: your own talk is not a close call.
+    const clash = !p.pinned && !p.own && !p.weak && p.gap <= clashMax;
+    const top = p.pinned || p.own || p.ranked[0];
     const rest = p.ranked.filter((r) => r !== top);
     const slot = {
       key: p.key,
@@ -1043,6 +1153,7 @@ function buildAgenda(results, prefs) {
       parallel: p.list.length,
       pick: top,
       pinned: !!p.pinned,
+      own: !!p.own,
       clashWith: clash ? rest[0] : null,
       alternatives: rest.slice(clash ? 1 : 0, clash ? 4 : 3),
       weak: p.weak,
@@ -1230,19 +1341,55 @@ function contentsHtml(s) {
   return `<details class="contents"><summary>What's in this session</summary>${desc}${papers}${link}</details>`;
 }
 
+/* Red is the second colour on this page, and it took an argument to add.
+ *
+ * The rule is that yellow means "this is the one" and nothing else is coloured,
+ * which is why yellow is scannable. Red here means something yellow cannot:
+ * *you have an obligation at this time*. It is not a stronger recommendation,
+ * it is a different kind of statement, it fires once or twice in a whole week,
+ * and it is the one line on the page whose cost of being missed is real. A
+ * second colour survives only while it keeps a single meaning — the moment
+ * anything else on this page turns red, both colours stop working. */
+function flagsHtml(s) {
+  const out = [];
+  if (mine.has(s.id)) {
+    out.push(`<span class="flag flag-own">You said you're presenting in this one</span>`);
+  }
+  const { n, affs } = instHits(s);
+  if (n) {
+    const who = affs.length > 1 ? `${esc(affs[0])} and ${affs.length - 1} more` : esc(affs[0]);
+    out.push(`<span class="flag flag-inst">${n} paper${n === 1 ? "" : "s"} from ${who}</span>`);
+  }
+  return out.length ? `<div class="flags">${out.join("")}</div>` : "";
+}
+
+// Available on every session the route draws, not just the pick: the talk you
+// are in may well be the one the tool ranked fourth.
+function mineBtn(id) {
+  return mine.has(id)
+    ? `<button type="button" class="mini" data-act="unmine" data-id="${id}">Not mine after all</button>`
+    : `<button type="button" class="mini" data-act="mine" data-id="${id}">I'm presenting in this</button>`;
+}
+
 function controlsHtml(r, slot, role) {
   const id = r.session.id;
+  const own = mineBtn(id);
+  /* Nothing else to offer on your own talk. "Not this one" in particular would
+   * be a lie: dismissing hides a session from the ranking, but the promotion
+   * reads the unfiltered slot list, so the button would appear to do nothing.
+   * The way out of this slot is to say it isn't yours. */
+  if (mine.has(id)) return own;
   if (role === "alt") {
-    return `<button type="button" class="mini" data-act="pin" data-id="${id}" data-slot="${esc(slot.key)}">Make this my pick</button>`;
+    return `<button type="button" class="mini" data-act="pin" data-id="${id}" data-slot="${esc(slot.key)}">Make this my pick</button> ${own}`;
   }
   if (role === "clash") {
-    return `<button type="button" class="mini" data-act="pin" data-id="${id}" data-slot="${esc(slot.key)}">Go with this one</button>`;
+    return `<button type="button" class="mini" data-act="pin" data-id="${id}" data-slot="${esc(slot.key)}">Go with this one</button> ${own}`;
   }
   if (slot.pinned) {
     return `<span class="pin-chip mono">your pick</span>
-      <button type="button" class="mini" data-act="unpin" data-id="${id}" data-slot="${esc(slot.key)}">Unpin</button>`;
+      <button type="button" class="mini" data-act="unpin" data-id="${id}" data-slot="${esc(slot.key)}">Unpin</button> ${own}`;
   }
-  return `<button type="button" class="mini" data-act="dismiss" data-id="${id}" data-slot="${esc(slot.key)}">Not this one</button>`;
+  return `<button type="button" class="mini" data-act="dismiss" data-id="${id}" data-slot="${esc(slot.key)}">Not this one</button> ${own}`;
 }
 
 /* The highlighter says "this is the one you're going to". A pinned pick gets the
@@ -1251,7 +1398,9 @@ function controlsHtml(r, slot, role) {
  * clash get nothing, because nothing has been decided in them yet. */
 function markClass({ clash, slot, role }) {
   if (clash || role !== "pick" || !slot) return "";
-  return slot.pinned ? "mark" : "mark-soft";
+  // A session you are presenting in is a decision, not a suggestion, so it takes
+  // the full highlighter a pin does. The thin stroke would say "we reckon".
+  return slot.pinned || slot.own ? "mark" : "mark-soft";
 }
 
 function pickHtml(r, norm, { clash = false, slot = null, role = "pick" } = {}) {
@@ -1262,6 +1411,7 @@ function pickHtml(r, norm, { clash = false, slot = null, role = "pick" } = {}) {
     ${r.dual ? `<span class="tagline">matches your work and your aims</span>` : ""}
     <h4><span class="${cls}">${esc(s.title)}</span></h4>
     <span class="meta mono">${metaBits(s).map(esc).join(" · ")}</span>
+    ${flagsHtml(s)}
     <div class="match-bar" role="img" aria-label="match strength ${Math.round(norm(r.score) * 100)} of 100"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
     ${evidenceHtml(r.evidence)}
     ${contentsHtml(s)}
@@ -1401,15 +1551,18 @@ function lookupHtml(q) {
     const r = rank ? STATE.results[rank - 1] : null;
     const where = `<span class="mono">${dayShort(s.day)} ${t(s.start)}${s.venue ? ` · ${esc(venueLabel(s))}` : ""}</span>`;
     if (!r) {
-      return `<div class="lookup-hit"><h4>${esc(s.title)}</h4>${where}
-        <p class="hint">Outside your current day or attendance filters, so it wasn't ranked.</p></div>`;
+      return `<div class="lookup-hit"><h4>${esc(s.title)}</h4>${where}${flagsHtml(s)}
+        <p class="hint">Outside your current day or attendance filters, so it wasn't ranked.</p>
+        <div class="pick-controls">${mineBtn(s.id)}</div></div>`;
     }
     const note = isAdminSession(s) ? `<p class="hint">Social/admin session — never recommended, whatever it scores.</p>` : "";
     return `<div class="lookup-hit">
       <h4>${esc(s.title)}</h4>${where}
+      ${flagsHtml(s)}
       <div class="lookup-rank">Ranked <strong>#${rank}</strong> of ${total} for you</div>
       <div class="match-bar"><span style="width:${Math.round(norm(r.score) * 100)}%"></span></div>
       ${evidenceHtml(r.evidence)}${note}
+      <div class="pick-controls">${mineBtn(s.id)}</div>
     </div>`;
   }).join("");
 }
@@ -1685,6 +1838,9 @@ that one. Rules:
   different in "activity spaces" and "sense of place", or that a paper about
   futures and a paper about sustainability share vocabulary and nothing else. If
   a pick looks like it was matched on a word, say so and replace it.
+- Any slot marked **I am presenting in this** is fixed. Don't move me, don't
+  suggest an alternative for that hour, and do factor in that I'll be in the room
+  before and after.
 - If a slot is better spent on a corridor conversation or a sit down, say that
   instead of picking something. A route with a deliberate gap in it is a better
   answer than four mediocre picks in a row.
@@ -1698,6 +1854,16 @@ that one. Rules:
   out.push("### What I'm working on now, and what I want from the week", "", goals || "_(left blank)_", "");
   const f = STATE.filters;
   out.push(`_Filters I set: days ${[...f.days].sort().join(", ") || "all"}; attendance ${f.mode}._`, "");
+  if (instRaw.trim()) {
+    out.push(`_I've asked the tool to flag papers from ${instRaw.trim()} — that's where I am, so those`
+      + ` are colleagues rather than strangers. A reason to go, not a reason to stay away._`, "");
+  }
+  const own = DATA.sessions.filter((sx) => mine.has(sx.id));
+  if (own.length) {
+    out.push(`_I'm presenting in ${own.length === 1 ? "one session" : `${own.length} sessions`}: `
+      + `${own.map((sx) => `${sx.title} (${dayShort(sx.day)} ${t(sx.start)})`).join("; ")}.`
+      + ` Those hours are spoken for._`, "");
+  }
 
   out.push("---", "", "## 2. The route the tool produced", "");
   for (const [day, slots] of days) {
@@ -1714,7 +1880,9 @@ that one. Rules:
         out.push(`- ${slot.clashWith.session.title}`, "");
         continue;
       }
-      out.push(`${head}${slot.pinned ? " — I pinned this one myself" : ""}`);
+      const why = slot.own ? " — **I am presenting in this**"
+        : (slot.pinned ? " — I pinned this one myself" : "");
+      out.push(`${head}${why}`);
       out.push(`${slot.pick.session.title} — ranked #${rank.get(slot.pick.session.id)} of ${total} for me`);
       const ev = evidenceText(slot.pick);
       if (ev) out.push(`_${ev}_`);
@@ -1890,8 +2058,25 @@ function renderAll({ restored = false, scroll = false } = {}) {
 
   $("#results").hidden = false;
   refreshStale();
+  refreshInstNote();   // needs DATA, which only exists once a route has been charted
   if (nowSlot) nowSlot.scrollIntoView({ behavior: "smooth", block: "center" });
   else if (scroll) $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function saveMine() {
+  try { localStorage.setItem(MINE_KEY, JSON.stringify([...mine])); } catch { /* flags are not worth failing over */ }
+}
+
+/* Marking a session touches the route (it gets promoted), the papers tab and the
+ * lookup pane at once, and the toggle exists in two of those three — so both
+ * call sites go through here rather than each re-rendering what it happens to
+ * be looking at. */
+function afterFlagChange() {
+  if (!STATE) return;
+  renderRoute();
+  $("#papers").innerHTML = papersHtml(STATE.papers, routedSessionIds(STATE.agenda.days));
+  $("#lookup-out").innerHTML = lookupHtml($("#lookup-input").value || "");
+  saveRoute();
 }
 
 // pins, dismissals and restores re-rank instantly from the scores in memory —
@@ -1910,10 +2095,23 @@ $("#route").addEventListener("click", (e) => {
     for (const r of STATE.results) {
       if (slotKey(r.session) === slot) STATE.dismissed.delete(r.session.id);
     }
+  } else if (act === "mine" || act === "unmine") {
+    if (act === "mine") mine.add(sid); else mine.delete(sid);
+    saveMine();
   }
-  renderRoute();
-  $("#papers").innerHTML = papersHtml(STATE.papers, routedSessionIds(STATE.agenda.days));
-  saveRoute();
+  afterFlagChange();
+});
+
+// The lookup pane is the only route to a session the day filters excluded, which
+// is the one place "when is my own talk?" has to keep working.
+$("#lookup-out").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn || !STATE) return;
+  const { act } = btn.dataset;
+  if (act !== "mine" && act !== "unmine") return;
+  if (act === "mine") mine.add(Number(btn.dataset.id)); else mine.delete(Number(btn.dataset.id));
+  saveMine();
+  afterFlagChange();
 });
 
 // ---------- tabs ----------
@@ -2011,6 +2209,17 @@ function refreshWorksNote() {
   }
   controls.hidden = false;
   syncWorksFilters(items, owner);
+  /* Prefill the institution box from the profile card, but only into an empty
+   * box — it is the user's field the moment they touch it, and a paste that
+   * re-parses must not overwrite what they corrected. */
+  const inst = $("#works-inst");
+  if (inst && !instRaw && parsed.institution) {
+    instRaw = [parsed.institution.name, parsed.institution.domain].filter(Boolean).join(", ");
+    inst.value = instRaw;
+    INST = instNeedles(instRaw);
+    try { localStorage.setItem(INST_KEY, instRaw); } catch { /* fine */ }
+    refreshInstNote();
+  }
 
   /* The list shows what the two controls left, with the exclusions as unticked
    * boxes rather than as absences — an excluded paper has to stay on screen or
@@ -2198,6 +2407,36 @@ $("#save-fraglet").addEventListener("click", downloadFraglet);
 $("#ics-btn").addEventListener("click", downloadIcs);
 $("#llm-btn").addEventListener("click", (e) => copyBrief(e.currentTarget));
 
+/* The count is the whole safety mechanism, the same way detectOwner prints the
+ * name it inferred: "UCL" and "University College London" catch different halves
+ * of this programme's spellings (90 papers against 113), and a value that catches
+ * nothing is indistinguishable from a value that works until you are told. It can
+ * only count once a chart has loaded the programme, so before that it says
+ * nothing rather than something wrong. */
+function refreshInstNote() {
+  const el = $("#works-inst-note");
+  if (!el) return;
+  if (!INST.length || !DATA?.sessions) { el.textContent = ""; return; }
+  let sess = 0, papers = 0;
+  for (const sx of DATA.sessions) {
+    const h = instHits(sx);
+    if (h.n) { sess++; papers += h.n; }
+  }
+  el.textContent = sess
+    ? `(${papers} paper${papers === 1 ? "" : "s"} in ${sess} session${sess === 1 ? "" : "s"})`
+    : "(nothing in the programme matches that)";
+}
+
+let instTimer = null;
+$("#works-inst").addEventListener("input", (e) => {
+  instRaw = e.target.value;
+  INST = instNeedles(instRaw);
+  try { localStorage.setItem(INST_KEY, instRaw); } catch { /* fine */ }
+  clearTimeout(instTimer);
+  // Debounced: every keystroke otherwise redraws nineteen slots mid-word.
+  instTimer = setTimeout(() => { refreshInstNote(); afterFlagChange(); }, 300);
+});
+
 let noteTimer = null;
 $("#works").addEventListener("input", () => {
   clearTimeout(noteTimer);
@@ -2238,6 +2477,18 @@ $("#works-list").addEventListener("change", (e) => {
   cb.closest("label")?.classList.toggle("out", !cb.checked);
   $("#works-count").innerHTML = worksCountHtml();
 });
+
+/* Both flags load before the saved route renders: the route promotes sessions
+ * the user is presenting in, so reading them afterwards would draw one agenda
+ * and then silently replace it. */
+try {
+  mine = new Set(JSON.parse(localStorage.getItem(MINE_KEY) || "[]").map(Number).filter(Number.isFinite));
+} catch { mine = new Set(); }
+try {
+  instRaw = localStorage.getItem(INST_KEY) || "";
+  INST = instNeedles(instRaw);
+  if (instRaw) $("#works-inst").value = instRaw;
+} catch { instRaw = ""; INST = []; }
 
 // restore a previous profile
 try {

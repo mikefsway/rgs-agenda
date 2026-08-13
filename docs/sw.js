@@ -32,7 +32,7 @@
 // visitor's cache. build.html and build.js landed in the same deploy but are
 // deliberately NOT in SHELL: the point of the cache is a route that opens in a
 // seminar room with no signal, and nobody needs the porting page offline.
-const CACHE = "traverse-v9";
+const CACHE = "traverse-v10";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

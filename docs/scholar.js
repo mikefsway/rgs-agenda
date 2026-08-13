@@ -90,6 +90,42 @@ function detectOwner(items) {
   return { key, name, rows: n };
 }
 
+/* Where the profile owner works, read off the profile card.
+ *
+ * "Verified email at ucl.ac.uk - Homepage" is a fixed Scholar string and the
+ * affiliation sits directly above it — the same positional trick the venue line
+ * uses, and for the same reason: the affiliation itself has no reliable shape
+ * ("UCL Energy Institute", "University of Exeter", "Bartlett School of
+ * Environment, Energy and Resources"). The anchor is what separates the owner's
+ * card from the co-author cards stacked above it, which have the identical
+ * name/name/affiliation shape but end in "Following" rather than a verified
+ * email. Without the anchor this returns null and the user types their own.
+ *
+ * The domain is worth carrying separately: it is the one part of a Scholar
+ * profile that is a real identifier rather than free text, and "ucl" out of
+ * "ucl.ac.uk" is exactly the acronym the programme's affiliations use. */
+const EMAIL_ANCHOR = /^verified email at\s+([a-z0-9.-]+\.[a-z]{2,})/i;
+
+function detectInstitution(lines) {
+  for (let i = 1; i < lines.length; i++) {
+    const m = EMAIL_ANCHOR.exec(lines[i]);
+    if (!m) continue;
+    /* The card is name / name / affiliation / verified-email, so the line above
+     * is the affiliation — unless the profile has no affiliation set, in which
+     * case it is the second of the two repeated name lines. Compare the two
+     * lines above rather than asking what an affiliation looks like: shape is no
+     * use here, because isNamePart reads "UCL Energy Institute" as a name
+     * (three tokens, the first three capitals — the exact shape of "MJ Fell"). */
+    const above = lines[i - 1];
+    const name = above && above !== lines[i - 2] && !CHROME_RE.test(above) ? above : null;
+    // "ucl.ac.uk" -> "ucl"; "manchester.ac.uk" -> "manchester". Drops the public
+    // suffix, which carries no institution.
+    const domain = m[1].toLowerCase().split(".")[0];
+    return { name, domain: domain === "www" ? null : domain };
+  }
+  return null;
+}
+
 // A solo author ("MJ Fell") is only safely separable from a short title by
 // position — in a Scholar row it always sits directly under the title. Matching
 // it on shape alone would eat titles that open with an acronym ("GIS in the field").
@@ -132,8 +168,11 @@ function parseWorks(raw) {
     (/^\s*title\b/im.test(raw) && /cited by/i.test(raw))
     || lines.filter(isAuthorLine).length >= 3
     || lines.filter((l) => isYear(Number(l))).length >= 3;
-  if (!looksScholar) return { kind: "prose", items: [], owner: null };
+  if (!looksScholar) return { kind: "prose", items: [], owner: null, institution: null };
 
+  // Read the card before sliceToTable throws the furniture away — the affiliation
+  // only exists up there.
+  const institution = detectInstitution(lines);
   const items = [];
   let prev = null;   // "title" | "authors"
   for (const line of sliceToTable(lines)) {
@@ -201,7 +240,7 @@ function parseWorks(raw) {
     // *first* slot didn't parse is unknown, not somebody else's.
     it.authorFirst = owner && it.authors?.[0] ? it.authors[0] === owner.key : null;
   }
-  return { kind: "works", items: uniq, owner };
+  return { kind: "works", items: uniq, owner, institution };
 }
 
 export { parseWorks };
