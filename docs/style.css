@@ -402,16 +402,26 @@ body.working #status::before {
   border-left: 2px solid var(--ink); font-size: 0.92rem; max-width: 46rem;
 }
 
-/* Day jump on the left, the two exports on the right and adjacent — the brief
-   first and in the solid button, because it is the half of this tool that can
-   do the things the ranking can't, and it spent its first fortnight as the
-   third ghost button on the row. margin-right: auto rather than
-   space-between, which would have put a hole between the two exports. */
+/* The two exports, alone on the row and starting at the left margin. The brief
+   is first and takes the solid button, because it is the half of this tool that
+   can do what the ranking can't.
+
+   It used to share this row with the day jump, which held the left edge on a
+   `margin-right: auto`. Measured: the row is wider than the 728px column, so
+   the .ics button wrapped onto a second line at the left margin and the primary
+   button sat alone out on the right rail at x=869. Down the left edge — which is
+   where reading starts — you met the day tabs, then the ghost button, and the
+   promotion of 14 Aug read as a demotion. Splitting the row is what makes the
+   promotion true, and it costs no height: two single lines in place of one row
+   that wrapped to two.
+
+   The day jump moved down to sit directly above the route, which is the thing it
+   navigates. Note it therefore needs its own entry in the print block: it was
+   only being hidden on paper by virtue of living inside this div. */
 .route-actions {
   display: flex; align-items: center;
   gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;
 }
-.route-actions .day-tabs { margin-right: auto; }
 .route-actions button.primary { font-size: 0.9rem; padding: 0.4rem 0.85rem; }
 
 /* The one control on the page that sends anything anywhere, so the caveat runs
@@ -425,7 +435,7 @@ body.working #status::before {
 #llm-hint { margin: 0 0 0.6rem; }
 
 /* ---- day jump ---- */
-.day-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.day-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.2rem; }
 .day-tabs button {
   font: inherit; font-size: 0.88rem;
   border: 1px solid var(--rule); border-radius: 3px;
@@ -608,7 +618,10 @@ footer p { margin: 0 0 0.5rem; max-width: 38rem; }
      conference. The lede is for people deciding whether to use the tool. */
   .topbar { border-bottom: 1px solid #999; }
   .intro, .panel, footer,
-  .view-tabs, .route-actions, #view-papers, #view-people, #view-lookup,
+  /* #day-tabs is listed by name: it used to be hidden here as a child of
+     .route-actions, and moving it out from under that div would otherwise have
+     printed four dead buttons at the top of every route. */
+  .view-tabs, .route-actions, #day-tabs, #view-papers, #view-people, #view-lookup,
   .llm-note, #llm-hint,
   .pick-controls, .hidden-note, details.alts, details.contents, .build-yours,
   /* A printed route is a snapshot, so the staleness of the one on screen is not

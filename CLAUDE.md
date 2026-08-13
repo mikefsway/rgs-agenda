@@ -193,9 +193,43 @@ from five lines to three. Nothing about the brief changed — this is the divisi
 of labour showing up in the layout, since half the things people ask the tool for
 ("no more energy justice", "nothing before 10", "not those four again") are only
 answerable by the button that was styled as an afterthought. The caveat sentence
-is untouched and still runs with the button, per the point above. `.route-actions`
-lost `justify-content: space-between` for `margin-right: auto` on the day tabs,
-which is what stops a hole opening between the two export buttons.
+is untouched and still runs with the button, per the point above.
+
+**And the promotion didn't take, because the row was too narrow to hold it — 14
+Aug 2026, same day.** The button was made `primary` and put first in source
+order, but it shared `.route-actions` with the day jump, which held the left edge
+on a `margin-right: auto`. Measured on a rendered route: day tabs + both buttons
+come to 771px against a 728px column, so the `.ics` button wrapped onto a second
+line at the left margin and the solid button sat alone out on the right rail at
+x=869. Down the left edge — which is where reading starts, and the only edge that
+exists on a phone — you met the day tabs, then the ghost button. The promotion
+read as a demotion, and it looked deliberate, because a lone button on the right
+of a toolbar is a real convention for "export, when you're finished".
+
+So the exports now have the row to themselves, starting at the left margin, and
+the day jump moved down to sit directly above the route it navigates — which is
+where it belonged anyway. **It costs no height**: two single lines in place of one
+row that wrapped to two, and the route starts 2px lower than before.
+
+The general form, and it is the same lesson as the works panel naming three
+papers whose checkboxes were two clicks away: **giving an element the styling of
+importance does nothing if the layout puts it where nobody reads.** Check where it
+landed, don't check what class it got.
+
+Two things that bit, both invisible from the page: `#day-tabs` was only hidden on
+paper by virtue of living inside `.route-actions`, so moving it out would have
+printed four dead buttons at the top of every route, and it needs its own entry
+in the print block now. And the first measurement of all this was taken against a
+stale `style.css` — service worker plus python's `Last-Modified` — which reported
+the fix as not applied. Clear both and re-read the CSSOM, per "Persistence and
+caching".
+
+**Not moved above the view tabs**, which is the other place it could go, since
+both exports describe the whole run rather than the Route view. A brief is *a
+second opinion on the route, not a second route*, and a second opinion
+presupposes the first: the model's job is to reach for the session the cosine put
+ninth, which means nothing to a reader who hasn't seen what ranks 1–4 were. Below
+the tabs, above the route, is the earliest point at which the button is honest.
 
 `slot.ranked` exists for this. It holds references, not copies, and `saveRoute`
 serialises `STATE.results` rather than the agenda, so nothing extra reaches
