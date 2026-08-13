@@ -117,6 +117,14 @@ function loadData() {
  * looking at the parser rather than at the three commands they haven't run. */
 class NoProgrammeData extends Error {}
 
+/* sessions.json and the embedding matrix loaded fine and are each internally
+ * valid, but they disagree on row order (see assertOrder). This is not a bad
+ * download, so "refresh and try again" is exactly the wrong advice — refreshing
+ * re-fetches the same mismatched pair. It carries its own operator-facing
+ * message naming both signatures and the fix, and failureMessage passes it
+ * through verbatim rather than flattening it to the generic data error. */
+class DataInconsistent extends Error {}
+
 async function fetchOne(path, as) {
   const r = await fetch(path);
   if (r.status === 404) throw new NoProgrammeData(path);
@@ -162,7 +170,7 @@ function assertOrder(meta, sessions) {
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   const got = h.toString(36);
   if (got !== meta.order_sig) {
-    throw new Error(
+    throw new DataInconsistent(
       `programme data is inconsistent: sessions.json is ordered ${got}, but the ` +
       `embeddings were built for ${meta.order_sig}. Re-run pipeline/embed.py.`
     );
@@ -309,11 +317,27 @@ function b64FromVec(v) {
   return btoa(s);
 }
 
+/* Decode a cached vector, or null if the stored string is anything other than a
+ * clean base64 encoding of a whole float array. Never throws: a truncated or
+ * corrupt entry (a torn localStorage write, a vector left by a different model)
+ * otherwise reaches `new Float32Array` as a RangeError, which plan() swallows
+ * into "something went wrong" while leaving the poison in place — permanently
+ * broken until the user clears storage by hand. The caller additionally checks
+ * the decoded length against DATA.dim: a wrong-but-4-aligned length would read
+ * past the vector as NaN in bestPerFacet and silently rank noise, which is the
+ * exact symptomless failure embedderSelfCheck exists to stop, on the one path
+ * that bypasses it (cached vectors never touch the self-check). */
 function vecFromB64(b) {
-  const s = atob(b);
+  let s;
+  try { s = atob(b); } catch { return null; }
+  if (s.length % 4 !== 0) return null;
   const u8 = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
   return new Float32Array(u8.buffer);
+}
+
+function dropEmbCache() {
+  try { localStorage.removeItem(embCacheKey()); } catch { /* storage disabled — nothing to drop */ }
 }
 
 function loadEmbCache() {
@@ -397,10 +421,24 @@ async function embedBatched(embed, texts, onBatch) {
   const cache = loadEmbCache();
   const vecs = new Array(texts.length);
   const missing = [];
+  let torn = false;
   texts.forEach((t, i) => {
-    if (cache[t]) vecs[i] = vecFromB64(cache[t].v);
-    else missing.push(i);
+    const hit = cache[t] ? vecFromB64(cache[t].v) : null;
+    if (hit && hit.length === DATA.dim) {
+      vecs[i] = hit;
+    } else {
+      // A present-but-unusable entry means the store is torn or stale (a
+      // truncated write, or vectors from a different model/dim than this key
+      // claims). Don't trust it piecemeal.
+      if (cache[t]) { torn = true; delete cache[t]; }
+      missing.push(i);
+    }
   });
+  // Drop the whole namespace so nothing invalid survives to a later run; entries
+  // that decoded to exactly DATA.dim floats are kept in `vecs` (provably
+  // well-formed) and the missing ones are re-embedded from the checked embedder
+  // below, then written back fresh by saveEmbCache.
+  if (torn) dropEmbCache();
   let done = texts.length - missing.length;
   if (done) onBatch(done);
   for (let i = 0; i < missing.length; i += EMBED_BATCH) {
@@ -822,7 +860,10 @@ function buildAgenda(results, prefs) {
     slots.get(key).push(r);
   }
   // First pass: rank each slot and find the ones too weak to be worth a decision.
-  const prepared = [...slots.entries()].sort().map(([key, list]) => {
+  // Sort by the "day|start" key explicitly. A bare .sort() would order the
+  // [key, list] pairs by Array-to-string coercion — right only by accident of
+  // ISO keys sorting lexicographically, and a trap for whoever changes the key.
+  const prepared = [...slots.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([key, list]) => {
     const [day] = key.split("|");
     list.sort((a, b) => b.score - a.score);
     const live = list.filter((r) => !dismissed.has(r.session.id));
@@ -1637,6 +1678,9 @@ function failureMessage(stage, err) {
     return "no programme data in docs/data/ — this is the kit, not a conference. "
       + "Run pipeline/fetch.py, normalize.py and embed.py, or see PORTING.md.";
   }
+  // Its own message names both order signatures and the fix; the generic
+  // "couldn't load the programme data — refresh" would send a porter the wrong way.
+  if (err instanceof DataInconsistent) return err.message;
   if (!navigator.onLine) return "you're offline — the model can't load until you're back on a network.";
   if (stage === "data") return "couldn't load the programme data — refresh and try again.";
   if (stage === "model") return "couldn't load the language model (CDN hiccup?) — refresh and try again.";
@@ -1750,7 +1794,7 @@ loadData()
   // ...with one exception: a missing docs/data/ is not a transient failure that
   // retrying will fix, and saying so on load beats letting someone fill in the
   // boxes first and find out afterwards.
-  .catch((e) => setStatus(e instanceof NoProgrammeData ? failureMessage(null, e) : ""));
+  .catch((e) => setStatus(e instanceof NoProgrammeData || e instanceof DataInconsistent ? failureMessage(null, e) : ""));
 
 // Offline support: cache the shell and data so the route opens on venue wifi
 // (or none). The model is already cached by transformers.js itself.
