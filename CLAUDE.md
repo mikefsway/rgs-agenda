@@ -139,6 +139,27 @@ Three things about it are load-bearing:
   the user from previous conversations — which is the actual reason to prefer
   your own LLM over a stranger's website, and the one input this tool can never
   have.
+- **It hands over the tool's own diagnostics, not just its output — added 14 Aug
+  2026.** Three things the page knew and the brief didn't. §1 now lists the works
+  box as two lists, *matched on* and *in my profile but not matched on*, each cut
+  title carrying the reason (`before 2020`, `not first-authored`, `I took this
+  one out by hand`) — a one-line disclosure of the counts was not enough, because
+  the reader has the whole publication list in front of them and no way to tell
+  which half produced the shortlist, which is exactly what they need to catch a
+  bad pick. §1 also carries the per-paper gap shares, which is the more valuable
+  half: on a 12-title filtered fixture one paper carries **38%** of the route, and
+  the page's reader can at least see their own agenda while the model was being
+  asked to audit a route with no idea that was true. And the preamble now says
+  what a match is worth — 0.57 for unrelated papers against 0.67 for a winning
+  pair, so 1.6 sd, never "about the same subject" — and names the failure it
+  should hunt: a match made on a framing word. Costs ~5 kB on 199.
+
+  Both §1 additions **fall back to the raw paste** when the parse no longer
+  describes the run (a prose profile, or a box edited since the chart, caught as
+  `items.length !== wp.total` and a `worksSig` mismatch). A brief that invented a
+  breakdown for a route those words didn't produce would be worse than the one
+  line it replaced. Verified: edit the box and §1 reverts, shares vanish, and the
+  stale note explains why.
 
 `slot.ranked` exists for this. It holds references, not copies, and `saveRoute`
 serialises `STATE.results` rather than the agenda, so nothing extra reaches

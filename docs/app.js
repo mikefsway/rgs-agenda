@@ -1542,6 +1542,88 @@ function briefSession(r, tier) {
   return bits.join("\n");
 }
 
+/* The works box, with the papers the tool actually matched on marked as such.
+ *
+ * The paste is everything the user has ever written; the route may rest on a
+ * quarter of it. A one-line disclosure said so and was not enough — the reader
+ * still has the full publication list in front of them and no way to tell which
+ * half produced the shortlist, which is precisely the question they need to
+ * answer to catch a bad pick. The unused titles stay in, marked and reasoned,
+ * because "I have a paper on this and the tool ignored it" is a finding.
+ *
+ * Falls back to the raw paste whenever the parse no longer describes the run —
+ * a prose profile, or a box edited since the chart. The stale note is already
+ * saying so on screen; the brief must not quietly invent a breakdown for a route
+ * that didn't come from these words. */
+function briefWorks(works, wp) {
+  const head = ["### What I've worked on", ""];
+  if (!works) return [...head, "_(left blank)_", ""];
+  if (!wp) return [...head, works, ""];
+  const items = parseWorks(works).items;
+  if (items.length !== wp.total) return [...head, works, ""];
+
+  // Mirrors buildProfile exactly — filter, then the cap — so `used` is the set
+  // that was embedded rather than an approximation of it.
+  const used = new Set(filterWorks(items, wp).slice(0, WORKS_MAX_TITLES).map((it) => it.title));
+  // Same order as filterWorks, so the reason given is the one that did the cut.
+  // The fallback is the cap, which is the only other way out of the pool.
+  const whyCut = (it) => {
+    if (wp.since && it.year && it.year < wp.since) return `before ${wp.since}`;
+    if (wp.firstOnly && it.authorFirst === false) return "not first-authored";
+    if (wp.excluded?.includes(it.title)) return "I took this one out by hand";
+    return `past the tool's ${WORKS_MAX_TITLES}-title cap`;
+  };
+  const line = (it, why) => `- ${it.title}${it.year ? ` (${it.year})` : ""}${why ? ` — ${why}` : ""}`;
+  const cut = items.filter((it) => !used.has(it.title));
+
+  const out = [...head];
+  out.push(`_Parsed out of my profile: ${wp.total} papers. The tool matched on `
+    + `${used.size} of them${wp.owner ? `, reading me as ${wp.owner}` : ""}. Both lists are here `
+    + `because the ones it skipped are still context for you — they just aren't what `
+    + `produced the route below._`, "");
+  out.push(`**Matched on (${used.size}):**`, "");
+  out.push(...items.filter((it) => used.has(it.title)).map((it) => line(it, "")), "");
+  if (cut.length) {
+    out.push(`**In my profile but not matched on (${cut.length}):**`, "");
+    out.push(...cut.map((it) => line(it, whyCut(it))), "");
+  }
+  return out;
+}
+
+// Papers under this carry too little of the route to be worth a line.
+const BRIEF_SHARE_MIN = 0.02;
+
+/* Which of those papers the route actually rested on.
+ *
+ * The panel on the page reports this and the brief did not, which was the wrong
+ * way round: the page's reader can see their own agenda and guess, while the
+ * model is being asked to audit a route with no idea that one paper out of
+ * sixty-seven produced a third of it. Share of the *gap* (best minus runner-up),
+ * never share of the argmax — see the works panel for why the two disagree. */
+function briefShares(works, wp) {
+  if (!wp?.winGap || wp.worksSig !== worksSig(works)) return [];
+  const ranked = Object.entries(wp.wins)
+    .map(([title, v]) => [title, v.gap / wp.winGap])
+    .filter(([, s]) => s >= BRIEF_SHARE_MIN)
+    .sort((a, b) => b[1] - a[1]);
+  if (!ranked.length) return [];
+
+  const out = ["### Which of my papers the route rested on", ""];
+  out.push(
+`The tool scores every session against each of my papers separately and keeps the
+best one, so a few papers can end up doing most of the work. These did — roughly,
+the share of the route that would change if the paper weren't in the box:`, "");
+  out.push(...ranked.map(([t, s]) => `- **${Math.round(100 * s)}%** — ${t}`), "");
+  out.push(
+`Two things about that list. A large share is not proof a paper is steering me:
+several papers on one topic sit within a hair of each other, so one of them takes
+the credit while removing it changes nothing, because its neighbour steps up.
+And the matching cannot do "not" — if something up there is work I have moved on
+from, it will go on pulling those sessions towards me however I word the box
+below. Saying so is one of the things you can do and it cannot.`, "");
+  return out;
+}
+
 function buildBrief() {
   if (!STATE?.agenda) return "";
   const { days, norm } = STATE.agenda;
@@ -1590,6 +1672,19 @@ that one. Rules:
   starts low whatever it is about. Treat a high rank as a strong hint and a low
   rank as weak evidence of nothing much — particularly for a session with only
   one or two papers in it.
+- The "matches X — from your paper Y" lines are weaker claims than they look.
+  Measured on a real profile against this programme: two papers with nothing in
+  common score about 0.57, and a *winning* pair scores about 0.67, so a match is
+  roughly 1.6 standard deviations above unrelated. It means "nearest thing of
+  mine", never "about the same subject". Where a line says **too close to
+  separate**, the tool is admitting it could not tell which of my papers matched —
+  the top two were within a whisker — so read those as pointing at a region of my
+  work rather than at a specific paper.
+- That gap is the main thing you can do and it cannot: spotting a match made on a
+  framing word rather than a subject. It has no idea that "space" means something
+  different in "activity spaces" and "sense of place", or that a paper about
+  futures and a paper about sustainability share vocabulary and nothing else. If
+  a pick looks like it was matched on a word, say so and replace it.
 - If a slot is better spent on a corridor conversation or a sit down, say that
   instead of picking something. A route with a deliberate gap in it is a better
   answer than four mediocre picks in a row.
@@ -1597,21 +1692,9 @@ that one. Rules:
   miss, and why those.`, "");
 
   out.push("---", "", "## 1. Me", "");
-  out.push("### What I've worked on", "", works || "_(left blank)_", "");
-  // The paste above is everything; the tool may have matched on a subset. Say
-  // which, or the shortlist looks inexplicably narrow to a reader who can see
-  // the whole publication list sitting right there.
   const wp = STATE.worksPick;
-  if (wp && wp.used < wp.total) {
-    const why = [
-      wp.since ? `published ${wp.since} or later` : null,
-      wp.firstOnly ? `first-authored by me (read as ${wp.owner})` : null,
-      wp.excluded?.length ? `not among ${wp.excluded.length} I took out by hand` : null,
-    ].filter(Boolean).join(", and ");
-    out.push(`_The tool matched on ${wp.used} of those ${wp.total} papers — the ones ${why}. `
-      + `I cut the rest deliberately; they're above because they're still context for you, `
-      + `not because the tool used them._`, "");
-  }
+  out.push(...briefWorks(works, wp));
+  out.push(...briefShares(works, wp));
   out.push("### What I'm working on now, and what I want from the week", "", goals || "_(left blank)_", "");
   const f = STATE.filters;
   out.push(`_Filters I set: days ${[...f.days].sort().join(", ") || "all"}; attendance ${f.mode}._`, "");
