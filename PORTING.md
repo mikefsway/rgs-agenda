@@ -420,6 +420,19 @@ account; this is the short form.
   percentile, and the two that were once float literals both misfired badly —
   one gated nothing at all, the other fired on 50–74% of slots. If you are
   writing a float to compare a cosine against, stop.
+- **Nothing that trims the works pool may be a weight.** The "since ⟨year⟩",
+  "only papers I led" and per-title checkboxes are filters, and the reason is the
+  band above: scoring takes the max over titles, so a multiplier big enough to
+  matter deletes a title and one small enough to be gentle does nothing. In or
+  out, and the user decides.
+- **Credit a paper with `best − second`, never with how many facets it wins.**
+  Near-duplicate titles all score within a hair of each other, so one of them
+  takes the argmax across a whole topic and looks decisive while removing it
+  changes nothing — the twin steps up. The works panel reports the gap for that
+  reason, and its copy claims attribution, not causation: measured, unticking
+  the paper that wins 20% of the real fixture leaves the top 20 sessions
+  identical, because facet scores are ranks and a cluster protects its own
+  ordering. Unticking bites when the paper is an isolated pocket in the profile.
 - **Threshold the min of two ranks, never each independently.** The dual-match
   badge was `worksHit >= p97 && goalsHit >= p97`, which reads as "top 3%" and
   is nearer 0.1% because the ranks are only loosely correlated. It fired on 0

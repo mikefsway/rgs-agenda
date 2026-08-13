@@ -45,6 +45,17 @@
   <textarea id="works" rows="7" spellcheck="false"
     placeholder="Paste your Google Scholar profile, a publication list, or a short bio."></textarea>
   <p class="parse-note" id="works-note" hidden></p>
+  <div class="works-filters" id="works-filters" hidden>
+    <span class="wf-item">
+      <label for="works-since">Use only work published since</label>
+      <select id="works-since"></select>
+    </span>
+    <span class="wf-item" id="works-first-wrap" hidden>
+      <label><input type="checkbox" id="works-first"> Only papers I led</label>
+      <span class="wf-note" id="works-first-note"></span>
+    </span>
+  </div>
+  <div id="works-list"></div>
 
   <label class="box-label" for="goals">What you're working on now, and what you want from the week</label>
   <p class="hint">This is where the matcher learns what you are really keen to get out of the conference.

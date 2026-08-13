@@ -31,10 +31,63 @@ function isNamePart(p) {
   return toks.length >= 2 && toks.length <= 4 && /^[A-ZÀ-Þ]{1,3}\.?$/.test(toks[0]);
 }
 
+function splitAuthors(line) {
+  return line.split(/\s*,\s*|\s+and\s+/).map((s) => s.trim()).filter(Boolean);
+}
+
 function isAuthorLine(line) {
-  const parts = line.split(/\s*,\s*|\s+and\s+/).map((s) => s.trim()).filter(Boolean);
+  const parts = splitAuthors(line);
   if (parts.length < 2) return false;
   return parts.filter(isNamePart).length / parts.length >= 0.6;
+}
+
+/* Identity of one author, for the single question anything downstream asks:
+ * is this me? Scholar abbreviates the given name inconsistently across rows of
+ * the same profile ("MJ Fell" on one paper, "M Fell" on the next), so match on
+ * first initial plus surname and nothing else. Returns null for a part that
+ * isn't a name — a trailing "…", an "et al" — and callers keep the null so
+ * position is preserved. */
+function authorKey(part) {
+  const toks = part.replace(/\.{3}|…/g, "").trim().split(/\s+/);
+  if (toks.length < 2) return null;
+  return `${toks[0][0]}|${toks[toks.length - 1]}`.toLowerCase();
+}
+
+/* Whose profile is this? The modal author, because nobody appears on more of
+ * your papers than you do.
+ *
+ * Inferring it beats asking for it: the name on the profile is up in the
+ * furniture sliceToTable has already cut, and a name typed into a box would
+ * silently turn "papers I led" into "papers nobody led". It refuses to guess
+ * rather than guess wrong — a wrong owner marks the wrong papers, and no check
+ * downstream could tell. Two guards: the winner has to be on most of the rows,
+ * and it has to be clear of the runner-up, which is what stops a two-person
+ * lab's second author being crowned on a coin toss. */
+function detectOwner(items) {
+  const rows = new Map();     // key -> rows it appears on
+  const forms = new Map();    // key -> {surface form -> count}, for display
+  let withAuthors = 0;
+  for (const it of items) {
+    if (!it.authors?.some(Boolean)) continue;
+    withAuthors++;
+    const seen = new Set();
+    it.authors.forEach((k, i) => {
+      if (!k || seen.has(k)) return;
+      seen.add(k);
+      rows.set(k, (rows.get(k) ?? 0) + 1);
+      const form = it.authorNames[i];
+      if (!forms.has(k)) forms.set(k, new Map());
+      const f = forms.get(k);
+      f.set(form, (f.get(form) ?? 0) + 1);
+    });
+  }
+  if (withAuthors < 3) return null;
+  const ranked = [...rows.entries()].sort((a, b) => b[1] - a[1]);
+  const [key, n] = ranked[0];
+  if (n < withAuthors * 0.6) return null;
+  if ((ranked[1]?.[1] ?? 0) > n * 0.5) return null;
+  const name = [...forms.get(key)].sort((a, b) => b[1] - a[1])[0][0];
+  return { key, name, rows: n };
 }
 
 // A solo author ("MJ Fell") is only safely separable from a short title by
@@ -79,7 +132,7 @@ function parseWorks(raw) {
     (/^\s*title\b/im.test(raw) && /cited by/i.test(raw))
     || lines.filter(isAuthorLine).length >= 3
     || lines.filter((l) => isYear(Number(l))).length >= 3;
-  if (!looksScholar) return { kind: "prose", items: [] };
+  if (!looksScholar) return { kind: "prose", items: [], owner: null };
 
   const items = [];
   let prev = null;   // "title" | "authors"
@@ -96,9 +149,33 @@ function parseWorks(raw) {
       continue;
     }
     if (CHROME_RE.test(line)) { prev = null; continue; }
-    if (isAuthorLine(line) || (prev === "title" && isSoloAuthorLine(line))) { prev = "authors"; continue; }
+    // Order matters. isSoloAuthorLine only asks whether the line *looks* like a
+    // single name, and a short two-author line ("G Powells, MJ Fell") looks
+    // exactly like one, so the multi-author test has to win. Treating that line
+    // as one name keys it to "G … Fell" — a person who doesn't exist, on a paper
+    // whose real first author is somebody else.
+    const multi = isAuthorLine(line);
+    const solo = !multi && prev === "title" && isSoloAuthorLine(line);
+    if (multi || solo) {
+      // Scholar prints the author line directly under its title, in submission
+      // order, and truncates the tail with "…" — never the head. So the one
+      // thing this line reliably carries is who is first, which is the one
+      // thing we want from it.
+      if (prev === "title" && items.length) {
+        const parts = multi ? splitAuthors(line) : [line];
+        const it = items[items.length - 1];
+        it.authorNames = parts;
+        it.authors = parts.map(authorKey);
+      }
+      prev = "authors";
+      continue;
+    }
     if (prev === "authors") { prev = null; continue; }   // the line after authors is the venue
-    if (looksLikeTitle(line)) { items.push({ title: line, year: null }); prev = "title"; continue; }
+    if (looksLikeTitle(line)) {
+      items.push({ title: line, year: null, authors: null, authorNames: null, authorFirst: null });
+      prev = "title";
+      continue;
+    }
     prev = null;
   }
 
@@ -112,7 +189,19 @@ function parseWorks(raw) {
   // Newest first. Under a hard cap, ordering *is* recency prioritisation: recent
   // work survives the cut and the back catalogue falls off the end.
   uniq.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-  return { kind: "works", items: uniq };
+
+  /* `authorFirst` is deliberately three-valued. false is "somebody else led
+   * this"; null is "no author line was read for this row", which happens when
+   * the paste is partial or the row is shaped oddly, and must not be silently
+   * treated as false — a filter that drops your own paper because a heuristic
+   * missed a line is invisible from the outside. Callers keep the nulls. */
+  const owner = detectOwner(uniq);
+  for (const it of uniq) {
+    // Keyed off authors[0] specifically, not "any name was read": a row whose
+    // *first* slot didn't parse is unknown, not somebody else's.
+    it.authorFirst = owner && it.authors?.[0] ? it.authors[0] === owner.key : null;
+  }
+  return { kind: "works", items: uniq, owner };
 }
 
 export { parseWorks };

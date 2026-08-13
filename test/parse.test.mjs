@@ -92,6 +92,84 @@ group("real Google Scholar profile (test/fixtures/scholar-profile.txt)");
 
   check("footer chrome dropped",
     !titles.some((t) => /^(Articles 1|PrivacyTermsHelp)/.test(t)));
+
+  // ---- authorship, which the "only papers I led" filter rests on ----
+
+  const { owner } = parseWorks(raw);
+  // The profile owner is inferred, never asked for — see detectOwner. Scholar
+  // renders him both "MJ Fell" and "M Fell" across rows of the same profile, so
+  // this failing is the signal that first-initial+surname matching has broken.
+  check("owner inferred from the author lines", owner?.key === "m|fell", JSON.stringify(owner));
+  check("owner's display name is the modal surface form", owner?.name === "MJ Fell", owner?.name);
+  check("owner is on all 67 rows", owner?.rows === 67, `got ${owner?.rows}`);
+
+  const led = items.filter((i) => i.authorFirst === true);
+  const notLed = items.filter((i) => i.authorFirst === false);
+  const unknown = items.filter((i) => i.authorFirst === null);
+  check("27 of 67 are first-authored", led.length === 27, `got ${led.length}`);
+  check("40 are led by someone else", notLed.length === 40, `got ${notLed.length}`);
+  // Not a nicety: a null is "no author line was read", and filterWorks keeps
+  // those rather than dropping a paper on a heuristic miss. If this ever stops
+  // being 0 on the real fixture, the author line parsing has regressed.
+  check("no row is left with unknown authorship", unknown.length === 0,
+    unknown.map((i) => i.title).join(" | "));
+
+  // A solo-author row: the one shape where first-authorship is unambiguous.
+  check("solo author row reads as led", services?.authorFirst === true);
+  // "G Powells, MJ Fell" — his name is present, second. The whole point of the
+  // filter is that this is the case it removes.
+  const flexCapital = items.find((i) => /^Flexibility Capital and Flexibility Justice/.test(i.title));
+  check("second-author row reads as not led", flexCapital?.authorFirst === false);
+  // "MJ Fell, L Pagel, C Chen, ..., GM Huebner, ..." — a truncated list must not
+  // lose its head, which is the only part of it that matters here.
+  const covid = items.find((i) => /^Validity of energy social research/.test(i.title));
+  check("truncated author list still reads its first author", covid?.authorFirst === true);
+  /* Regression: "MJ Fell, LF Chiu" is 16 characters and reads as a single name
+   * to isSoloAuthorLine, which only asks about shape. Taking that branch keys
+   * the row to "M … Chiu" — nobody — and quietly hands three of his own
+   * first-authored papers to someone else. isAuthorLine has to be asked first. */
+  const children = items.find((i) => /^Children, parents and home energy use/.test(i.title));
+  check("short two-author line is split, not read as one name",
+    children?.authorFirst === true && children?.authors?.length === 2,
+    JSON.stringify(children?.authors));
+}
+
+// ------------------------------------------------------------ owner detection
+
+group("owner detection refuses to guess rather than guessing wrong");
+{
+  const row = (title, authors, year) => [title, authors, `Some Journal 12 (3), 1-9`, `4    ${year}`];
+  // Two people on everything, in alternating order: nobody is the profile owner
+  // on the evidence available, and marking papers against a coin toss would be
+  // invisible downstream. The control hides itself in this state.
+  const pair = parseWorks(["TITLE\tCITED BY\tYEAR",
+    ...row("Household energy demand and the shape of the evening peak", "A Smith, B Jones", 2021),
+    ...row("Time of use tariffs and the working day", "B Jones, A Smith", 2022),
+    ...row("Fieldwork methods for domestic energy research", "A Smith, B Jones", 2023),
+    ...row("Peak demand and the limits of automation", "B Jones, A Smith", 2024),
+  ].join("\n"));
+  check("no owner when two authors share every paper", pair.owner === null, JSON.stringify(pair.owner));
+  check("authorship is unknown, not false, when there's no owner",
+    pair.items.every((i) => i.authorFirst === null));
+
+  const solo = parseWorks(["TITLE\tCITED BY\tYEAR",
+    ...row("Household energy demand and the shape of the evening peak", "A Smith, B Jones", 2021),
+    ...row("Time of use tariffs and the working day", "C Patel, A Smith", 2022),
+    ...row("Fieldwork methods for domestic energy research", "A Smith, D Okafor", 2023),
+    ...row("Peak demand and the limits of automation", "A Smith", 2024),
+  ].join("\n"));
+  check("owner found when one name recurs and the others don't",
+    solo.owner?.key === "a|smith", JSON.stringify(solo.owner));
+  check("first-authorship read off the recovered owner",
+    solo.items.filter((i) => i.authorFirst === true).length === 3,
+    solo.items.map((i) => `${i.authorFirst}`).join(","));
+
+  // Three rows is the floor; below it the modal author means nothing.
+  const thin = parseWorks(["TITLE\tCITED BY\tYEAR",
+    ...row("Household energy demand and the shape of the evening peak", "A Smith, B Jones", 2021),
+    ...row("Time of use tariffs and the working day", "A Smith, C Patel", 2022),
+  ].join("\n"));
+  check("two papers is too few to name an owner", thin.owner === null, JSON.stringify(thin.owner));
 }
 
 // ------------------------------------------------------- tab-separated pastes

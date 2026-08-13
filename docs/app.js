@@ -456,10 +456,54 @@ async function embedBatched(embed, texts, onBatch) {
   return vecs;
 }
 
-function buildProfile(worksRaw, goalsRaw) {
+/* The two controls under the works box are one mechanism: they choose which
+ * parsed titles go into the pool. Nothing downstream moves — no weights, no
+ * thresholds, no new constants.
+ *
+ * That is not timidity, it is the only version available. A *weight* on a bge
+ * cosine can't be tuned to a useful strength: similarities here sit in a band
+ * roughly 0.45–0.70 and `bestPerFacet` takes the max over titles, so a
+ * multiplier big enough to matter (×0.9) drops a title below every other title
+ * in the pool and silently deletes it, while one gentle enough to be a nudge
+ * (×0.98) does nothing at all. There is no middle. Since the honest operation
+ * is in-or-out, it is the user's call and it is on screen, rather than a decay
+ * constant someone here invented. A real soft weight would have to live in rank
+ * space and would move every route for everyone — see CLAUDE.md. */
+const WORKS_FILTER_NONE = { since: null, firstOnly: false, excluded: [] };
+let worksFilter = { ...WORKS_FILTER_NONE, excluded: [] };
+
+/* Excluded titles are held by title text, not by index: the list is re-sorted
+ * and re-filtered constantly, and an index would silently come to mean a
+ * different paper. Titles are unique by construction — parseWorks dedupes on a
+ * normalised form of them. */
+function filterWorks(items, filter) {
+  const out = filter.excluded?.length ? new Set(filter.excluded) : null;
+  return items.filter((it) => {
+    // None of the three treats "unknown" as "no". An unread year or a missed
+    // author line is not evidence against a paper, and dropping someone's own
+    // work on a heuristic miss is invisible from the outside — which is the
+    // failure mode this whole file is written to avoid.
+    if (filter.since && it.year && it.year < filter.since) return false;
+    if (filter.firstOnly && it.authorFirst === false) return false;
+    if (out?.has(it.title)) return false;
+    return true;
+  });
+}
+
+// Identity of the works box alone. The per-paper shares below are measured
+// against a particular paste, and they have to survive the user unticking
+// papers — that is the entire workflow they exist for — so they are keyed to
+// the text rather than to the full profileSig, which the filters are part of.
+function worksSig(works) {
+  let h = 5381;
+  for (let i = 0; i < works.length; i++) h = ((h * 33) ^ works.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function buildProfile(worksRaw, goalsRaw, filter = WORKS_FILTER_NONE) {
   const parsed = parseWorks(worksRaw);
   const worksChunks = parsed.kind === "works"
-    ? parsed.items.slice(0, WORKS_MAX_TITLES).map((it) => it.title)
+    ? filterWorks(parsed.items, filter).slice(0, WORKS_MAX_TITLES).map((it) => it.title)
     : chunkText(worksRaw, 420, WORKS_MAX_PROSE);
   const goalsChunks = chunkText(goalsRaw, 420, GOALS_MAX_CHUNKS);
   return {
@@ -470,7 +514,10 @@ function buildProfile(worksRaw, goalsRaw) {
   };
 }
 
-function buildFraglet(worksRaw, goalsRaw, days, mode) {
+// `worksFilter` rides along because the boxes are refilled from here on load
+// and restoreRoute checks the profile signature against them: drop the filter
+// and yesterday's route is discarded every morning as a mismatch.
+function buildFraglet(worksRaw, goalsRaw, days, mode, filter) {
   const brief = (goalsRaw || worksRaw).replace(/\s+/g, " ").slice(0, 160);
   return {
     title: "RGS-IBG 2026 conference interests",
@@ -478,6 +525,7 @@ function buildFraglet(worksRaw, goalsRaw, days, mode) {
     detail: [worksRaw, goalsRaw].filter(Boolean).join("\n\n"),
     works: worksRaw,
     goals: goalsRaw,
+    worksFilter: { ...filter },
     category: "interests",
     domain: "conference",
     tags: ["rgs-ibg-2026", `mode:${mode}`, ...days.map((d) => `day:${d}`)],
@@ -698,10 +746,19 @@ function buildPeople(results, facets, facetScore, sessions, allowed) {
   return { institutions, groups: ranked };
 }
 
-// Best similarity + winning chunk per facet, for one source pool.
+/* Best similarity + winning chunk per facet, for one source pool.
+ *
+ * Also carries the runner-up, because the winner alone is a misleading thing to
+ * report. Eight papers on the same topic all land within a hair of each other,
+ * so one of them takes the argmax on every facet in that area and *looks* like
+ * it is driving the agenda, while removing it changes nothing — its neighbour
+ * steps up. `gap` (best minus second-best) is what separates a paper that is
+ * merely credited from one that is actually carrying the match. Measured: this
+ * is not a hypothetical, see the concentration line's numbers in CLAUDE.md. */
 function bestPerFacet(vecs) {
   const { facets, matrix, dim } = DATA;
   const sim = new Float32Array(facets.length);
+  const second = new Float32Array(facets.length);
   const which = new Int16Array(facets.length).fill(-1);
   for (let q = 0; q < vecs.length; q++) {
     const qv = vecs[q];
@@ -709,10 +766,11 @@ function bestPerFacet(vecs) {
       let dot = 0;
       const off = f * dim;
       for (let k = 0; k < dim; k++) dot += matrix[off + k] * qv[k];
-      if (dot > sim[f]) { sim[f] = dot; which[f] = q; }
+      if (dot > sim[f]) { second[f] = sim[f]; sim[f] = dot; which[f] = q; }
+      else if (dot > second[f]) second[f] = dot;
     }
   }
-  return { sim, which };
+  return { sim, second, which };
 }
 
 function scoreSessions(profile, filters) {
@@ -807,11 +865,52 @@ function scoreSessions(profile, filters) {
     results.forEach((r, i) => { r.dual = agree[i] >= t; });
   }
 
+  /* How much of the programme each of your papers is speaking for.
+   *
+   * `bestPerFacet` takes the max over titles, so every facet is won by exactly
+   * one of them, and that distribution is nothing like uniform: measured on the
+   * real 67-title fixture, one paper wins 20.2% of all 3,309 facets and the top
+   * three take 36.4%. Two or three papers write the agenda and, until this
+   * existed, nothing on screen said so — which is the failure behind "a couple
+   * of papers are hitting against everything". It is free to compute (the argmax
+   * is already in W.best.which) and it is the only thing here that makes the max
+   * visible, so it is reported whether or not it looks bad.
+   *
+   * Counted over allowed sessions only, so the denominator is the programme the
+   * user actually asked about rather than the days they aren't coming. */
+  const worksWins = {};
+  let winFacets = 0;
+  let winGap = 0;
+  if (W.chunks.length) {
+    for (const [si, fIdxs] of perSession) {
+      if (!allowed.has(si)) continue;
+      for (const f of fIdxs) {
+        const q = W.best.which[f];
+        if (q < 0) continue;
+        const t = W.chunks[q];
+        // What would be lost if this paper weren't in the box: nearly nothing
+        // when a near-twin sits behind it, the whole similarity when it is the
+        // only title in the pool (`second` is 0 there). Summed, never
+        // thresholded — comparing a float literal against a cosine is the
+        // mistake this file is full of.
+        const gap = W.best.sim[f] - W.best.second[f];
+        const w = worksWins[t] ?? (worksWins[t] = { n: 0, gap: 0 });
+        w.n++;
+        w.gap += gap;
+        winFacets++;
+        winGap += gap;
+      }
+    }
+  }
+
   results.sort((a, b) => b.score - a.score);
   // Papers and people respect the day/mode filters for the same reason the route
   // does: there is no point being shown the perfect paper on a day you aren't here.
   return {
     results,
+    worksWins,
+    winFacets,
+    winGap,
     papers: topPapers(facets, facetScore, sessions, allowed, [W, G]),
     people: buildPeople(results, facets, facetScore, sessions, allowed),
   };
@@ -923,13 +1022,24 @@ function buildAgenda(results, prefs) {
  * the lot rather than showing a route built from data that no longer exists. */
 const slimCredit = ({ label, chunk, sole }) => ({ label, chunk, sole });
 
-// Identity of the input that produced a route. djb2 over both boxes — not for
-// security, just so a saved route can prove it belongs to the profile on
-// screen before it renders as "Your route".
-function profileSig(works, goals) {
+/* Identity of the input that produced a route. djb2 over both boxes — not for
+ * security, just so a saved route can prove it belongs to the profile on screen
+ * before it renders as "Your route".
+ *
+ * The works filters decide which papers were matched on, so they belong to that
+ * identity: the same paste with "only papers I led" ticked is a different
+ * profile, and must not restore yesterday's route as if it weren't. Folded in
+ * only when a filter is actually set, so an unfiltered profile hashes exactly
+ * as it did before this existed and no route already in localStorage is
+ * discarded by the upgrade. */
+function profileSig(works, goals, filter = WORKS_FILTER_NONE) {
   const s = `${works}\u0000${goals}`;
+  const set = filter.since || filter.firstOnly || filter.excluded?.length;
+  const sig = set
+    ? `${s}|${filter.since ?? ""}|${filter.firstOnly ? 1 : 0}|${[...(filter.excluded ?? [])].sort().join("")}`
+    : s;
   let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < sig.length; i++) h = ((h * 33) ^ sig.charCodeAt(i)) >>> 0;
   return h.toString(36);
 }
 
@@ -941,6 +1051,7 @@ function saveRoute() {
     device: STATE.device,
     chartedAt: STATE.chartedAt,
     filters: { days: [...STATE.filters.days], mode: STATE.filters.mode },
+    worksPick: STATE.worksPick,
     weights: STATE.weights,
     choices: Object.fromEntries(STATE.choices),
     dismissed: [...STATE.dismissed],
@@ -961,7 +1072,7 @@ function restoreRoute() {
   // A route may only render as "Your route" for the profile that produced it.
   // The boxes are refilled from the fraglet before this runs, so a mismatch
   // means the input changed since charting — discard rather than masquerade.
-  const sig = profileSig($("#works").value.trim(), $("#goals").value.trim());
+  const sig = profileSig($("#works").value.trim(), $("#goals").value.trim(), worksFilter);
   if (saved.profileSig !== sig) {
     try { localStorage.removeItem(ROUTE_KEY); } catch { /* fine */ }
     return false;
@@ -978,6 +1089,7 @@ function restoreRoute() {
     people: saved.people || { institutions: [], groups: [] },
     weights: saved.weights,
     filters: { days: new Set(saved.filters.days), mode: saved.filters.mode },
+    worksPick: saved.worksPick || null,
     choices: new Map(Object.entries(saved.choices || {}).map(([k, v]) => [k, Number(v)])),
     dismissed: new Set(saved.dismissed || []),
     chartedAt: saved.chartedAt,
@@ -985,6 +1097,7 @@ function restoreRoute() {
     device: saved.device,
   };
   renderAll({ restored: true });
+  refreshWorksNote();   // a restored route carries its shares with it
   return true;
 }
 
@@ -1433,6 +1546,20 @@ that one. Rules:
 
   out.push("---", "", "## 1. Me", "");
   out.push("### What I've worked on", "", works || "_(left blank)_", "");
+  // The paste above is everything; the tool may have matched on a subset. Say
+  // which, or the shortlist looks inexplicably narrow to a reader who can see
+  // the whole publication list sitting right there.
+  const wp = STATE.worksPick;
+  if (wp && wp.used < wp.total) {
+    const why = [
+      wp.since ? `published ${wp.since} or later` : null,
+      wp.firstOnly ? `first-authored by me (read as ${wp.owner})` : null,
+      wp.excluded?.length ? `not among ${wp.excluded.length} I took out by hand` : null,
+    ].filter(Boolean).join(", and ");
+    out.push(`_The tool matched on ${wp.used} of those ${wp.total} papers — the ones ${why}. `
+      + `I cut the rest deliberately; they're above because they're still context for you, `
+      + `not because the tool used them._`, "");
+  }
   out.push("### What I'm working on now, and what I want from the week", "", goals || "_(left blank)_", "");
   const f = STATE.filters;
   out.push(`_Filters I set: days ${[...f.days].sort().join(", ") || "all"}; attendance ${f.mode}._`, "");
@@ -1647,28 +1774,146 @@ $("#lookup-input").addEventListener("input", () => {
 
 function setStatus(msg) { statusEl.textContent = msg; }
 
+/* The year list is the profile's own years — no invented granularity — and the
+ * count beside each one is the whole point of the control: you are choosing how
+ * much of your back catalogue still counts as you, and you can see the price. */
+function syncWorksFilters(items, owner) {
+  // A new paste retires the old exclusions. They are matched by title, so a
+  // stale one is inert rather than wrong — but it would still sit in the
+  // profile signature and quietly stop a saved route restoring.
+  if (worksFilter.excluded.length) {
+    const live = new Set(items.map((it) => it.title));
+    worksFilter.excluded = worksFilter.excluded.filter((t) => live.has(t));
+  }
+  const sel = $("#works-since");
+  const years = [...new Set(items.map((i) => i.year).filter(Boolean))].sort((a, b) => b - a);
+  if (worksFilter.since && !years.includes(worksFilter.since)) worksFilter.since = null;
+  sel.innerHTML = ['<option value="">any year</option>'].concat(years.map((y) =>
+    `<option value="${y}">${y} onwards (${filterWorks(items, { ...worksFilter, since: y }).length})</option>`
+  )).join("");
+  sel.value = worksFilter.since ?? "";
+
+  const wrap = $("#works-first-wrap");
+  // No owner means the paste doesn't look like one person's profile, so the
+  // control would be marking papers against a name we guessed. Hide it rather
+  // than offer a filter that can't be trusted.
+  if (!owner) { worksFilter.firstOnly = false; wrap.hidden = true; return; }
+  wrap.hidden = false;
+  $("#works-first").checked = worksFilter.firstOnly;
+  // Naming who it decided you are is the check on the guess: a wrong name is
+  // obvious to you and invisible to everything else here.
+  $("#works-first-note").textContent =
+    `(read as ${owner.name} — ${items.filter((i) => i.authorFirst === true).length} of ${items.length})`;
+}
+
+// Render state that has to survive the note being rebuilt in place.
+let listedItems = [];
+let lastParsed = null;
+let detailsWasOpen = false;
+
+/* The one part of the note that a tick changes. Ticking a box must not rebuild
+ * the list: that detaches the row under the cursor, drops keyboard focus and
+ * resets the scroll, and unticking four papers in a row is exactly the flow
+ * this exists for. The concentration line is deliberately *not* updated either
+ * — it describes the last route, which unticking a paper doesn't retroactively
+ * change. It refreshes when you chart again, which is the point at which it
+ * becomes true again. */
+function worksCountHtml() {
+  if (!lastParsed) return "";
+  const kept = filterWorks(lastParsed.items, worksFilter);
+  const used = kept.slice(0, WORKS_MAX_TITLES);
+  const dropped = kept.length - used.length;
+  return (kept.length !== lastParsed.items.length ? ` Matching on <strong>${kept.length}</strong> of them.` : "")
+    + (dropped ? ` Newest ${WORKS_MAX_TITLES} used, ${dropped} older dropped.` : "")
+    + (used.length ? "" : ` <strong>Nothing left to match on</strong> — widen the year, or tick some back in.`);
+}
+
 // Live feedback on the works box. Cleanup is heuristic, so show what was read
 // rather than asking the user to trust it.
 function refreshWorksNote() {
   const el = $("#works-note");
+  const controls = $("#works-filters");
   const raw = $("#works").value;
-  if (!raw.trim()) { el.hidden = true; return; }
-  const { kind, items } = parseWorks(raw);
+  if (!raw.trim()) { el.hidden = true; controls.hidden = true; $("#works-list").innerHTML = ""; return; }
+  const parsed = parseWorks(raw);
+  const { kind, items, owner } = parsed;
+  lastParsed = kind === "works" ? parsed : null;
   el.hidden = false;
   if (kind !== "works") {
+    controls.hidden = true;
+    $("#works-list").innerHTML = "";
     el.innerHTML = "Read as free text. Paste a Google Scholar profile and it'll be cleaned to titles automatically.";
     return;
   }
-  const used = items.slice(0, WORKS_MAX_TITLES);
+  controls.hidden = false;
+  syncWorksFilters(items, owner);
+
+  /* The list shows what the two controls left, with the exclusions as unticked
+   * boxes rather than as absences — an excluded paper has to stay on screen or
+   * there is no way to put it back. `kept` (exclusions applied) is what actually
+   * gets matched, and is the number reported. */
+  const byControls = filterWorks(items, { ...worksFilter, excluded: [] });
+  listedItems = byControls.slice(0, WORKS_MAX_TITLES);
   const years = items.map((i) => i.year).filter(Boolean);
   const span = years.length ? ` spanning ${Math.min(...years)}–${Math.max(...years)}` : "";
-  const dropped = items.length - used.length;
-  const list = used.map((i) =>
-    `<li>${esc(i.title)}${i.year ? ` <span class="mono">${i.year}</span>` : ""}</li>`).join("");
+
+  // Shares from the last chart, if it was this same paste. Keyed to the works
+  // text so unticking a paper doesn't wipe the very numbers you're acting on.
+  const wp = STATE?.worksPick;
+  // .trim() to match plan(), which signs the trimmed box — a trailing newline
+  // in the paste would otherwise hide the shares on every chart.
+  const wins = wp && wp.worksSig === worksSig(raw.trim()) && wp.winGap ? wp : null;
+  /* Share of the *gap*, not share of the argmax. A paper that wins a fifth of
+   * the programme by a whisker over its own near-twin is not driving anything —
+   * untick it and the twin takes over — and reporting the argmax count invites
+   * exactly that wasted click. The gap share answers the question the user is
+   * actually asking: how much of this agenda would go away if this paper
+   * weren't in the box. */
+  const share = (t) => (wins ? (100 * (wins.wins[t]?.gap ?? 0)) / wins.winGap : 0);
+  const out = new Set(worksFilter.excluded);
+  const list = listedItems.map((i, n) => {
+    const pc = share(i.title);
+    const gone = out.has(i.title);
+    return `<li><label class="${gone ? "out" : ""}"><input type="checkbox" data-i="${n}"${gone ? "" : " checked"}> `
+      + `${esc(i.title)}${i.year ? ` <span class="mono">${i.year}</span>` : ""}`
+      + `${i.authorFirst === true ? ' <span class="mono">led</span>' : ""}`
+      + `${pc >= 1 ? ` <span class="mono share">${Math.round(pc)}%</span>` : ""}</label></li>`;
+  }).join("");
+
+  /* The headline is the whole point of the panel: it makes the max-over-titles
+   * visible. Ranked by share, three names, and the number they add up to. */
+  let concentration = "";
+  if (wins) {
+    const top = Object.entries(wins.wins)
+      .sort((a, b) => b[1].gap - a[1].gap).slice(0, 3);
+    const sum = top.reduce((a, [, v]) => a + v.gap, 0);
+    // Only worth saying when it is true: three of sixty-seven papers carrying a
+    // sixth of the agenda is a finding, three carrying 4% is just arithmetic.
+    if (top.length >= 3 && sum / wins.winGap >= 0.15) {
+      concentration = `<span class="concentration">Your last route rested on a few of these: `
+        + `<strong>${top.map(([t]) => `${esc(t.slice(0, 46))}${t.length > 46 ? "…" : ""}`).join("</strong>, <strong>")}</strong> `
+        + `carried <strong>${Math.round(100 * sum / wins.winGap)}%</strong> of it between them. `
+        + `Untick anything that isn't you any more.</span>`;
+    }
+  }
+
   el.innerHTML = `Cleaned to <strong>${items.length} title${items.length === 1 ? "" : "s"}</strong>${span} —
-    authors, journals and citation counts stripped.`
-    + (dropped ? ` Newest ${WORKS_MAX_TITLES} used, ${dropped} older dropped.` : "")
-    + `<details><summary>Check what was read</summary><ol class="parsed-list">${list}</ol></details>`;
+    authors, journals and citation counts stripped.<span id="works-count">${worksCountHtml()}</span>`
+    + concentration;
+
+  /* The list lives below the two controls rather than inside the note, so the
+   * panel reads in the order you use it: what was read, how to narrow it, then
+   * the titles themselves. Inside the note, an open list pushed the controls a
+   * screen down from the sentence they belong to. */
+  $("#works-list").innerHTML = listedItems.length
+    ? `<details${detailsWasOpen ? " open" : ""}><summary>Check what was read, and untick anything that isn't you`
+      + `</summary><ol class="parsed-list">${list}</ol></details>`
+    : "";
+
+  // The year and first-author controls do rebuild the list, so the open state
+  // has to be carried across by hand.
+  const det = $("#works-list").querySelector("details");
+  if (det) det.addEventListener("toggle", () => { detailsWasOpen = det.open; });
 }
 
 // One message per way this actually fails. "Something went wrong" was covering
@@ -1698,6 +1943,15 @@ async function plan() {
   const mode = document.querySelector('input[name="mode"]:checked').value;
   if (!days.size) { setStatus("pick at least one day."); return; }
 
+  /* Before the model, not after: parseWorks is string work and costs nothing,
+   * and finding out that the filters left no papers is worth knowing before a
+   * 10-second embed rather than after one. */
+  const profile = buildProfile(worksRaw, goalsRaw, worksFilter);
+  if (profile.parsed.kind === "works" && profile.parsed.items.length && !profile.works.chunks.length) {
+    setStatus("no papers left to match on — widen the year, or tick some back in below the box.");
+    return;
+  }
+
   const btn = $("#plan-btn");
   btn.disabled = true;
   document.body.classList.add("working");
@@ -1707,7 +1961,6 @@ async function plan() {
     stage = "model";
     const embed = await loadEmbedder();
     stage = "matching";
-    const profile = buildProfile(worksRaw, goalsRaw);
     const noun = profile.parsed.kind === "works" ? "papers" : "profile";
     const nWorks = profile.works.chunks.length;
     setStatus(`reading your ${noun}…`);
@@ -1718,7 +1971,7 @@ async function plan() {
     profile.goals.vecs = await embedBatched(embed, profile.goals.chunks, () => {});
     setStatus("charting the route…");
     await new Promise((r) => setTimeout(r, 30)); // let status paint
-    const { results, papers, people } = scoreSessions(profile, { days, mode });
+    const { results, papers, people, worksWins, winFacets, winGap } = scoreSessions(profile, { days, mode });
     if (!results.length) { setStatus("no sessions match those filters."); return; }
     STATE = {
       results, papers, people,
@@ -1727,12 +1980,31 @@ async function plan() {
       choices: new Map(),
       dismissed: new Set(),
       chartedAt: new Date().toISOString(),
-      profileSig: profileSig(worksRaw, goalsRaw),
+      // What the works box actually contributed, kept so the brief can say so
+      // even on a route restored tomorrow morning.
+      worksPick: profile.parsed.kind === "works"
+        ? {
+          ...worksFilter,
+          used: profile.works.chunks.length,
+          total: profile.parsed.items.length,
+          owner: profile.parsed.owner?.name ?? null,
+          // For the concentration line, which has to outlive this chart —
+          // you read it, untick a paper, and chart again.
+          wins: worksWins,
+          winFacets,
+          winGap,
+          worksSig: worksSig(worksRaw),
+        }
+        : null,
+      profileSig: profileSig(worksRaw, goalsRaw, worksFilter),
       device: EMB_DEVICE,
     };
     renderAll({ scroll: true });
     saveRoute();
-    const fraglet = buildFraglet(worksRaw, goalsRaw, [...days], mode);
+    // The per-paper shares only exist once a route does, so the panel that
+    // reports them is a step behind the button unless it's told.
+    refreshWorksNote();
+    const fraglet = buildFraglet(worksRaw, goalsRaw, [...days], mode, worksFilter);
     localStorage.setItem(FRAGLET_KEY, JSON.stringify(fraglet));
     $("#save-fraglet").hidden = false;
     $("#fraglet-hint").hidden = false;
@@ -1768,6 +2040,32 @@ $("#works").addEventListener("input", () => {
   noteTimer = setTimeout(refreshWorksNote, 250);
 });
 
+// Both controls re-render the note (counts, the "led" tags, each other's
+// option labels) and nothing else. Changing one does not re-chart: the works
+// box behaves the same way, and the button stays the one thing that commits.
+$("#works-since").addEventListener("change", (e) => {
+  worksFilter.since = e.target.value ? Number(e.target.value) : null;
+  refreshWorksNote();
+});
+$("#works-first").addEventListener("change", (e) => {
+  worksFilter.firstOnly = e.target.checked;
+  refreshWorksNote();
+});
+
+// Delegated, because the list is rebuilt whenever the other two controls move.
+$("#works-list").addEventListener("change", (e) => {
+  const cb = e.target;
+  if (!cb.matches("input[type=checkbox][data-i]")) return;
+  const it = listedItems[Number(cb.dataset.i)];
+  if (!it) return;
+  const out = new Set(worksFilter.excluded);
+  if (cb.checked) out.delete(it.title); else out.add(it.title);
+  worksFilter.excluded = [...out];
+  // In place, not a re-render — see worksCountHtml.
+  cb.closest("label")?.classList.toggle("out", !cb.checked);
+  $("#works-count").innerHTML = worksCountHtml();
+});
+
 // restore a previous profile
 try {
   const saved = JSON.parse(localStorage.getItem(FRAGLET_KEY) || "null");
@@ -1776,6 +2074,7 @@ try {
     // it belongs in the works box.
     $("#works").value = saved.works ?? saved.detail ?? "";
     $("#goals").value = saved.goals ?? "";
+    worksFilter = { ...WORKS_FILTER_NONE, ...(saved.worksFilter || {}) };
     if (saved.works || saved.goals || saved.detail) {
       $("#save-fraglet").hidden = false;
       $("#fraglet-hint").hidden = false;

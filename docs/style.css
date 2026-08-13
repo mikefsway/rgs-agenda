@@ -246,6 +246,38 @@ fieldset input[type="text"], input[type="date"] {
 .parse-note summary { cursor: pointer; color: var(--link); margin-top: 0.35rem; }
 .parsed-list { margin: 0.4rem 0 0; padding-left: 1.3rem; max-height: 13rem; overflow-y: auto; }
 .parsed-list li { margin: 0.15rem 0; }
+/* "led", the year and the share are all scanned, not read. */
+.parsed-list .mono { color: var(--ink-2); font-size: 0.9em; }
+/* The share is the number you act on, so it gets the ink the tags don't.
+   Deliberately not yellow: yellow means "this is the one you're going to". */
+.parsed-list .share { color: var(--ink); }
+.parsed-list label { display: block; cursor: pointer; }
+.parsed-list input { margin-right: 0.35rem; }
+/* Unticked stays legible and is clearly out. Driven by a class rather than
+   :has(input:not(:checked)) so the tick handler doesn't need a re-render. */
+.parsed-list label.out { color: var(--ink-2); opacity: 0.6; }
+
+#works-list:empty { display: none; }
+#works-list details { color: var(--ink-2); font-size: 0.85rem; margin-top: 0.35rem; }
+#works-list summary { cursor: pointer; color: var(--link); }
+
+.concentration {
+  display: block; margin-top: 0.5rem; padding-top: 0.5rem;
+  border-top: 1px solid var(--rule-2);
+}
+.concentration strong { font-weight: 500; }
+
+/* Sits under the parse note and reads as part of it — these are a statement
+   about what was read, not a filter bar over the whole page. */
+.works-filters {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem;
+  margin: 0.5rem 0 0; padding: 0 0.15rem;
+  color: var(--ink-2); font-size: 0.85rem;
+}
+.wf-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.wf-item label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.works-filters select { font: inherit; font-family: "IBM Plex Mono", ui-monospace, monospace; padding: 0.1rem 0.2rem; }
+.wf-note { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.9em; }
 
 .controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.75rem; margin: 1.1rem 0 1.2rem; }
 fieldset { border: 0; padding: 0; margin: 0; display: flex; gap: 0.85rem; flex-wrap: wrap; align-items: baseline; }

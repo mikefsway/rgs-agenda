@@ -201,15 +201,128 @@ so it needs the real-model protocol in "Verifying a scoring change" and a
 before/after diff, not a simulation. Until it is, the LLM brief says the bias is
 there in as many words.
 
-**There is no recency weighting, and this file used to claim there was.** The
-claim was that ordering is the recency prioritisation *under a cap*.
-`scholar.js` does sort newest-first, but `app.js` slices at
-`WORKS_MAX_TITLES = 120` and a real profile is 67 titles, so the sort never bites
-and a 2014 paper counts exactly as much as one from last year. On the fixture
-this is why the agenda leans on a decade-old back catalogue. The cheap fix is a
-"use only work since [year]" control — `scholar.js` already parses the years and
-the works panel already prints the span — which leaves the scoring maths alone
-and makes it the user's call rather than a decay constant someone invented.
+**Recency and authorship are the user's call, not a weight — built 13 Aug
+2026.** There used to be no recency handling at all, and this file used to claim
+there was: `scholar.js` sorts newest-first, but `app.js` slices at
+`WORKS_MAX_TITLES = 120` and a real profile is 67 titles, so the sort never bit
+and a 2014 paper counted exactly as much as one from last year.
+
+Two controls under the works box now choose which parsed titles enter the pool:
+"use only work published since ⟨year⟩", and "only papers I led". They are one
+mechanism — `filterWorks` — and nothing downstream moves: no weights, no
+thresholds, no new constants.
+
+**That they are filters rather than weights is the load-bearing part.** A
+multiplier on a bge cosine has no useful setting. Similarities here sit in a band
+of roughly 0.45–0.70 and `bestPerFacet` takes the max over titles, so ×0.9 drops
+a title below every other title in the pool and silently deletes it, while ×0.98
+does nothing at all. There is no middle to tune. The honest operation is in or
+out, so it is on screen and the user makes it. (A real soft weight would have to
+live in rank space — per-chunk percentile, weight as an exponent — and would move
+every route for every user, so it needs the protocol in "Verifying a scoring
+change" first.)
+
+Three things about the authorship half:
+
+- **The profile owner is inferred, never asked for.** `detectOwner` takes the
+  modal author across the parsed rows: nobody is on more of your papers than you
+  are. The name on a Scholar page is up in the furniture `sliceToTable` has
+  already cut, and a name typed into a box would turn "papers I led" into "papers
+  nobody led" without a symptom. It refuses to guess — no owner, control hidden —
+  when the winner isn't on ≥60% of rows or the runner-up is within half of it,
+  which is the two-people-on-everything case. The detected name is printed next
+  to the control, because a wrong guess is obvious to the user and invisible to
+  everything else here.
+- **`authorFirst` is three-valued and `filterWorks` keeps the nulls.** null means
+  "no author line was read for this row". Treating that as "not led" drops
+  someone's own paper on a heuristic miss, which is exactly the kind of failure
+  this file exists to prevent. It is 0 of 67 on the real fixture and the test
+  asserts that, so a regression in author-line parsing shows up as a count rather
+  than as a quietly thinner agenda.
+- **Ask `isAuthorLine` before `isSoloAuthorLine`.** This bit on the first run.
+  `isSoloAuthorLine` only asks whether a line *looks* like one name, and a short
+  two-author line ("G Powells, MJ Fell", 18 chars) looks exactly like one — so
+  taking that branch keys the row to "G … Fell", a person who does not exist, and
+  hands three of his own first-authored papers to somebody else. The fixture
+  count went 24 → 27 on the fix.
+
+**Neither control fixes concentration, measured: one paper wins 20% of the
+programme.** On the real fixture, `bestPerFacet`'s argmax over the 67 titles is
+not remotely uniform — *Capturing the distributional impacts of long-term
+low-carbon transitions* wins the works-best on **20.2% of all 3,309 facets**, the
+top three titles take 36.4%, the top ten 63.2%.
+
+Both controls keep that paper — it is 2020 and first-authored — and cutting the
+pool *concentrates* it: 67 titles → top share 20.2% / top-3 36.4%; first-authored
+only (27) → 24.3% / 48.1%; since 2020 and first-authored (13) → 27.3% / 64.0%.
+The top 20 sessions overlap 19 of 20 between the unfiltered and the 13-title run.
+So the two controls do what they say and are not the fix for "a couple of papers
+are hitting against everything"; they help when the runaway papers happen to be
+old or co-authored, which on this fixture they are not.
+
+## Per-paper shares and unticking — built 13 Aug 2026, and what it cost to learn
+
+The works panel now reports which of your papers the last route rested on, and
+every title in the list is a checkbox. Exclusions live in `worksFilter.excluded`,
+held **by title text** — the list is re-sorted and re-filtered constantly and an
+index would come to mean a different paper — and they are part of `profileSig`
+like the other two controls.
+
+**Report the gap, not the argmax count.** The first version credited each title
+with the number of facets it won, and that measure is misleading in a way that
+would have wasted the user's clicks: eight papers on one topic all land within a
+hair of each other, so one of them takes the argmax across that whole area and
+*looks* like it is driving the agenda, while removing it changes nothing because
+its neighbour steps up. `bestPerFacet` now also carries the runner-up, and a
+title is credited with `best − second` summed over the facets it wins: what would
+actually be lost if it weren't in the box. On the fixture the two measures
+disagree in both directions — the top paper is 20.3% by count and **29.9%** by
+gap, while *A framework for understanding…* is 5.1% by count and 3.8% by gap.
+Never thresholded, only summed and shared out, per the no-absolute-cosines rule.
+
+**Unticking moves a route only when the paper is an isolated pocket, and the
+fixture is the opposite case.** Measured, and this is the finding that matters:
+
+- Untick the 20%/29.9% paper on the real profile and re-chart → the top 20 is
+  **unchanged, 20 of 20**. Untick every paper carrying ≥2% (17 of the 67, over
+  half the argmax between them) → top-10 overlap 9 of 10, top-20 19 of 20, and
+  the concentration flattens to 8%/8%/8%. The route barely notices.
+- On a synthetic profile of the shape the complaint actually describes — eight
+  papers on LLM agents and computational methods, two co-authored ones on just
+  transitions — the panel names the energy pair as 22.6% and 8.8%, and unticking
+  them changes 2 of the top 10 and swings the evidence lines wholesale, from
+  *Methodological challenges in charting the data terrain* and *Animating place
+  in community-based research* to *Working on and 'working with' AI*, *The
+  Algorithmic Tour Guide* and *Advancing Youth Place Imaginaries with Generative
+  AI*.
+
+The mechanism behind both results is `toRanks`: facet scores are percentile ranks
+within the corpus, so what survives is the *ordering* of facets by best match,
+and that ordering is stable under removing a title unless the title was the
+unique best match for a region. A cluster protects itself; an isolated pocket
+doesn't. Good news and bad news in the same sentence — no single paper can hijack
+your agenda, and you cannot veto by deletion either. When someone says two papers
+are dominating and unticking them does nothing, the honest answer is that their
+back catalogue really does point there and the lever is the goals box or the LLM
+brief, not the works box.
+
+The panel's copy is written to claim only attribution ("your last route rested
+on these") and not causation, for exactly that reason. It appears only when the
+top three carry ≥15% between them, because three of sixty-seven papers carrying
+a sixth of the agenda is a finding and three carrying 4% is arithmetic.
+
+**Ticking a box must not re-render the list.** It rebuilds the row under the
+cursor, drops keyboard focus and resets the scroll of a `max-height: 13rem`
+scroller, and unticking four papers in a row is the entire flow. The handler
+updates a class on the label and the count in `#works-count` in place;
+`worksCountHtml` exists for that and is shared with the full render. The
+concentration line is deliberately *not* updated on a tick — it describes the
+last route, which unticking a paper does not retroactively change.
+
+The principled fix for concentration is still unbuilt: per-chunk percentile, so a
+title with a generically high baseline stops winning on baseline alone. That is a
+scoring change and belongs with the facet-count PIT above, behind a real
+before/after.
 
 Two smaller ones from the same pass, both unbuilt: session **format** is in the
 data and shown nowhere, though it is something people genuinely choose on (a
