@@ -109,6 +109,24 @@ What replaced it is deliberately plainer, and the plainness has rules:
 - 3px radii, hairline rules, no page-wide background pattern, no entrance
   animations. The one animation left is the working pulse, which is status.
 
+**Four rounds of feedback each added something true, and the page got busy — a
+pass on 14 Aug 2026.** What came off was prose, not function: the works hint
+repeated the parse note's own sentence about stripping authors and citations
+(which the note then says with real numbers, the moment you paste), the goals
+hint took six lines to make three points, the brief's note took five to make
+two, and the institution field sat between Days and Attending with a two-line
+explanation, splitting the two checkbox groups across three rows. It is last in
+the row now. Two labels that repeat on every card lost their tails ("I'm
+presenting in this" → "I'm presenting"), which is worth about 60 words down the
+page and loses nothing, since the card is the context.
+
+What was looked at and kept: the `dual` tagline reads like a duplicate of the
+evidence lines and isn't — the lines say which box a *quote* came from, the
+tagline says both boxes rank this session in their top slice, which is the
+landing page's promise, and it fires on 15 of 61 drawn cards rather than on
+everything. The parse note, the stale note and the privacy note all say
+something no other line says. Nothing was cut for tidiness alone.
+
 If a change here starts adding a metaphor, ask whether the metaphor carries
 information. The gutter does. A coordinates line does not.
 
@@ -168,6 +186,16 @@ Three things about it are load-bearing:
   breakdown for a route those words didn't produce would be worse than the one
   line it replaced. Verified: edit the box and §1 reverts, shares vanish, and the
   stale note explains why.
+
+**It spent its first fortnight as the third ghost button on the row.** Promoted
+14 Aug 2026: solid button, first of the two exports, and the note under it cut
+from five lines to three. Nothing about the brief changed — this is the division
+of labour showing up in the layout, since half the things people ask the tool for
+("no more energy justice", "nothing before 10", "not those four again") are only
+answerable by the button that was styled as an afterthought. The caveat sentence
+is untouched and still runs with the button, per the point above. `.route-actions`
+lost `justify-content: space-between` for `margin-right: auto` on the day tabs,
+which is what stops a hole opening between the two export buttons.
 
 `slot.ranked` exists for this. It holds references, not copies, and `saveRoute`
 serialises `STATE.results` rather than the agenda, so nothing extra reaches
@@ -339,6 +367,22 @@ The panel's copy is written to claim only attribution ("your last route rested
 on these") and not causation, for exactly that reason. It appears only when the
 top three carry ≥15% between them, because three of sixty-seven papers carrying
 a sixth of the agenda is a finding and three carrying 4% is arithmetic.
+
+**The panel named three papers and hid the checkboxes for them — fixed 14 Aug
+2026.** The first version put the three titles in the sentence, truncated to 46
+characters, and left the boxes in a *collapsed* `<details>` below the filters,
+among 67 rows in paste order. The user's report was "I don't have the option to
+untick the 3 papers", which is exactly right: the sentence told you to untick and
+the control was two clicks and a hunt away. The list is now sorted by share
+whenever shares exist — stable, so titles that won nothing keep the order they
+were read in — and the disclosure opens itself the first time a chart produces
+the finding, latched on `worksSig` in `concOpenedFor` so closing it sticks. The
+sentence dropped the names, because the first three rows *are* the names, with
+their percentages against them. One place to read it and act on it.
+
+The general form is worth keeping: **a panel that reports a problem has to
+contain the control for it.** Two elements pointing at each other read as a
+missing feature, and the user reports it as one.
 
 **Ticking a box must not re-render the list.** It rebuilds the row under the
 cursor, drops keyboard focus and resets the scroll of a `max-height: 13rem`

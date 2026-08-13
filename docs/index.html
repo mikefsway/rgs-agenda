@@ -39,9 +39,8 @@
   plans rise to the top.</p>
 
   <label class="box-label" for="works">What you've worked on</label>
-  <p class="hint">Paste your Google Scholar profile (do "select all" on your profile and copy), a
-  publication list, or a bio. Scholar pastes get cleaned up automatically -- authors,
-  journals and citation counts are stripped before matching.</p>
+  <p class="hint">Paste your Google Scholar profile -- select all on your profile page and copy
+  -- or a publication list, or a short bio.</p>
   <textarea id="works" rows="7" spellcheck="false"
     placeholder="Paste your Google Scholar profile, a publication list, or a short bio."></textarea>
   <p class="parse-note" id="works-note" hidden></p>
@@ -58,12 +57,10 @@
   <div id="works-list"></div>
 
   <label class="box-label" for="goals">What you're working on now, and what you want from the week</label>
-  <p class="hint">This is where the matcher learns what you are really keen to get out of the conference.
-  It doesn't need to be long, but be sure to include the key topics and themes you are
-  currently interested in. Write what you want, not what you don't: the matching compares
-  meanings and can't read "not", so "no more energy justice" pulls energy justice sessions
-  towards you rather than away. To rule things out, use the AI brief button that appears
-  with your route.</p>
+  <p class="hint">The topics and themes you're into now. It doesn't need to be long. Write what
+  you want, not what you don't: the matching can't read "not", so "no more energy justice"
+  pulls energy justice towards you rather than away. To rule things out, use the AI brief
+  that comes with your route.</p>
   <textarea id="goals" rows="4" spellcheck="false"
     placeholder="e.g. I'm moving from tariff design into energy justice fieldwork and want to find people doing longitudinal survey work in the Global South. Also hoping to meet potential postdoc hosts."></textarea>
 
@@ -75,20 +72,19 @@
       <label><input type="checkbox" name="day" value="2026-09-03" checked> Thu 3</label>
       <label><input type="checkbox" name="day" value="2026-09-04" checked> Fri 4</label>
     </fieldset>
-    <fieldset class="inst-field">
-      <legend>Flag talks from</legend>
-      <input type="text" id="works-inst" spellcheck="false" autocomplete="organization"
-        placeholder="e.g. University College London, UCL">
-      <span class="wf-note" id="works-inst-note"></span>
-      <span class="hint">Your institution, so colleagues' talks stand out. Add both the full
-      name and the short one -- the programme spells it several ways. Nothing is scored on
-      this; it only adds a note.</span>
-    </fieldset>
     <fieldset>
       <legend>Attending</legend>
       <label><input type="radio" name="mode" value="any" checked> Any</label>
       <label><input type="radio" name="mode" value="inperson"> In person</label>
       <label><input type="radio" name="mode" value="online"> Online / hybrid</label>
+    </fieldset>
+    <fieldset class="inst-field">
+      <legend>Flag talks from</legend>
+      <input type="text" id="works-inst" spellcheck="false" autocomplete="organization"
+        placeholder="e.g. University College London, UCL">
+      <span class="wf-note" id="works-inst-note"></span>
+      <span class="hint">Your institution, so colleagues' talks stand out. Add the short form
+      too -- the programme spells it several ways. Nothing is scored on it.</span>
     </fieldset>
   </div>
 
@@ -121,14 +117,13 @@
   <div id="view-route" class="view" role="tabpanel" aria-label="Route">
     <div class="route-actions">
       <nav id="day-tabs" class="day-tabs" aria-label="Conference days"></nav>
+      <button id="llm-btn" class="primary" type="button">Copy a brief for your own AI</button>
       <button id="ics-btn" class="ghost" type="button">Download calendar (.ics)</button>
-      <button id="llm-btn" class="ghost" type="button">Copy a brief for your own AI</button>
     </div>
-    <p class="llm-note">The brief holds your route, a long shortlist for every timeslot, and
-    what you wrote about yourself. Paste it into Claude, ChatGPT or whatever you use, and it
-    can weigh things this page can't -- what you already have enough of, who you're avoiding,
-    what's in your diary. <strong>This is the one button here that sends your text off your
-    device</strong>, to whoever runs that AI. Everything else stays in this browser.</p>
+    <p class="llm-note">Paste it into Claude, ChatGPT or whatever you use: it holds your route
+    and a long shortlist for every slot, and it can weigh what this page can't -- what you've
+    had enough of, who you're avoiding, what's in your diary. <strong>This is the one button
+    here that sends your text off your device</strong>, to whoever runs that AI.</p>
     <p class="hint" id="llm-hint" hidden></p>
     <div id="route"></div>
   </div>

@@ -290,7 +290,9 @@ fieldset label { display: inline-flex; align-items: center; gap: 0.3rem; font-si
 input[type="checkbox"], input[type="radio"] { accent-color: var(--ink); width: 1rem; height: 1rem; }
 
 /* The institution box sits with days and attendance because it is a route
-   option, not a filter on the profile — nothing it says changes a score. */
+   option, not a filter on the profile — nothing it says changes a score. Last
+   in the row, and full-width: it is a text field with a note under it, and in
+   the middle it split the two checkbox groups across three lines. */
 .inst-field { flex-basis: 100%; align-items: baseline; }
 .inst-field input {
   font: inherit; font-size: 0.94rem; padding: 0.15rem 0.35rem;
@@ -390,10 +392,17 @@ body.working #status::before {
   border-left: 2px solid var(--ink); font-size: 0.92rem; max-width: 46rem;
 }
 
+/* Day jump on the left, the two exports on the right and adjacent — the brief
+   first and in the solid button, because it is the half of this tool that can
+   do the things the ranking can't, and it spent its first fortnight as the
+   third ghost button on the row. margin-right: auto rather than
+   space-between, which would have put a hole between the two exports. */
 .route-actions {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; align-items: center;
   gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;
 }
+.route-actions .day-tabs { margin-right: auto; }
+.route-actions button.primary { font-size: 0.9rem; padding: 0.4rem 0.85rem; }
 
 /* The one control on the page that sends anything anywhere, so the caveat runs
    with it rather than sitting in a footnote. Not styled as a warning: it is a

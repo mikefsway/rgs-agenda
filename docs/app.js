@@ -1353,7 +1353,7 @@ function contentsHtml(s) {
 function flagsHtml(s) {
   const out = [];
   if (mine.has(s.id)) {
-    out.push(`<span class="flag flag-own">You said you're presenting in this one</span>`);
+    out.push(`<span class="flag flag-own">You said you're presenting</span>`);
   }
   const { n, affs } = instHits(s);
   if (n) {
@@ -1368,7 +1368,7 @@ function flagsHtml(s) {
 function mineBtn(id) {
   return mine.has(id)
     ? `<button type="button" class="mini" data-act="unmine" data-id="${id}">Not mine after all</button>`
-    : `<button type="button" class="mini" data-act="mine" data-id="${id}">I'm presenting in this</button>`;
+    : `<button type="button" class="mini" data-act="mine" data-id="${id}">I'm presenting</button>`;
 }
 
 function controlsHtml(r, slot, role) {
@@ -2172,6 +2172,7 @@ function syncWorksFilters(items, owner) {
 let listedItems = [];
 let lastParsed = null;
 let detailsWasOpen = false;
+let concOpenedFor = "";
 
 /* The one part of the note that a tick changes. Ticking a box must not rebuild
  * the list: that detaches the row under the cursor, drops keyboard focus and
@@ -2243,6 +2244,13 @@ function refreshWorksNote() {
    * actually asking: how much of this agenda would go away if this paper
    * weren't in the box. */
   const share = (t) => (wins ? (100 * (wins.wins[t]?.gap ?? 0)) / wins.winGap : 0);
+  /* Once shares exist the list is ordered by them. The panel's whole job is to
+   * get you to the two or three papers carrying the agenda, and the first
+   * version named them in a sentence while leaving them scattered through 67
+   * rows in paste order — which is naming a problem and hiding the control for
+   * it. Sort is stable, so everything with no share keeps the order it was read
+   * in, which is what the list is for before a route exists. */
+  if (wins) listedItems.sort((a, b) => share(b.title) - share(a.title));
   const out = new Set(worksFilter.excluded);
   const list = listedItems.map((i, n) => {
     const pc = share(i.title);
@@ -2254,7 +2262,8 @@ function refreshWorksNote() {
   }).join("");
 
   /* The headline is the whole point of the panel: it makes the max-over-titles
-   * visible. Ranked by share, three names, and the number they add up to. */
+   * visible. How much of the route the top three carried, and no more than
+   * that — the names are in the list, in that order. */
   let concentration = "";
   if (wins) {
     const top = Object.entries(wins.wins)
@@ -2263,10 +2272,19 @@ function refreshWorksNote() {
     // Only worth saying when it is true: three of sixty-seven papers carrying a
     // sixth of the agenda is a finding, three carrying 4% is just arithmetic.
     if (top.length >= 3 && sum / wins.winGap >= 0.15) {
-      concentration = `<span class="concentration">Your last route rested on a few of these: `
-        + `<strong>${top.map(([t]) => `${esc(t.slice(0, 46))}${t.length > 46 ? "…" : ""}`).join("</strong>, <strong>")}</strong> `
-        + `carried <strong>${Math.round(100 * sum / wins.winGap)}%</strong> of it between them. `
+      /* It used to name the three, truncated to 46 characters, and leave you to
+       * find them. The names are now the first three rows of the list with
+       * their shares against them, so the sentence only has to say how much and
+       * point down. One place to read it and act on it, rather than a claim
+       * here and the checkboxes somewhere else. */
+      concentration = `<span class="concentration">Your last route rested on a few of these: the top `
+        + `three below carried <strong>${Math.round(100 * sum / wins.winGap)}%</strong> of it between them. `
         + `Untick anything that isn't you any more.</span>`;
+      /* Open the list the first time a chart says this, because the sentence is
+       * pointing at controls that were behind a closed disclosure. Latched by
+       * works signature so closing it sticks — a disclosure that reopens itself
+       * is one you stop reading. */
+      if (concOpenedFor !== wins.worksSig) { concOpenedFor = wins.worksSig; detailsWasOpen = true; }
     }
   }
 
