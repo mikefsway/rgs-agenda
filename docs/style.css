@@ -165,6 +165,16 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute is how everything here is shown and concealed, and the
+   browser implements it as a `display: none` in the UA stylesheet — which any
+   author rule setting `display` beats, whatever its specificity. `.works-filters`
+   (`display: flex`) did exactly that, so a first visit opened with the works
+   filter row already on screen: an empty "use only work published since" select
+   and a checkbox for a profile nobody had pasted yet. Enforcing it once here is
+   the only version of this that can't be reintroduced by a later layout rule.
+   The print block's `#view-route[hidden]` override still wins on specificity. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--paper);
