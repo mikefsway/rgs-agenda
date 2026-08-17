@@ -161,7 +161,28 @@ function regexFromSource(name) {
 }
 const ADMIN_TITLE = regexFromSource("ADMIN_TITLE");
 const SOCIAL_EVENT = regexFromSource("SOCIAL_EVENT");
-const isAdmin = (s) => ADMIN_TITLE.test(s.title) || SOCIAL_EVENT.test(s.title);
+const NOT_ADMIN = regexFromSource("NOT_ADMIN");
+const isAdmin = (s) => !NOT_ADMIN.test(s.title)
+  && (ADMIN_TITLE.test(s.title) || SOCIAL_EVENT.test(s.title));
+
+/* NOT_ADMIN is a hand-written exception to a heuristic, which is the kind of
+ * line that outlives the thing it was written for. A session that gets renamed
+ * or dropped at the next refresh would leave it matching nothing, and nothing is
+ * exactly what a silently dead exception looks like. So: it must match, and
+ * match once. Two hits means a later session has wandered into the exception and
+ * is being kept for a reason nobody chose. */
+const spared = sessions.filter((s) => NOT_ADMIN.test(s.title));
+ok("the NOT_ADMIN exception still describes exactly one session", spared.length === 1,
+  spared.length === 0
+    ? "it matches nothing — the session was renamed or dropped, so delete the exception or update it"
+    : `it matches ${spared.length}: ${spared.map((s) => `"${s.title}"`).join("; ")}`);
+if (spared.length === 1) {
+  const s = spared[0];
+  ok("...and that session would otherwise be filtered out",
+    !s.papers.length && s.description.length < 200,
+    `"${s.title}" has ${s.papers.length} papers and ${s.description.length} chars — `
+    + "the rule no longer catches it, so the exception is doing nothing");
+}
 
 const excluded = sessions.filter(isAdmin);
 console.log(`  info  excludes ${excluded.length} of ${sessions.length} sessions`);

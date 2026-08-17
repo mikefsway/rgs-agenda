@@ -1132,8 +1132,31 @@ const ADMIN_TITLE = /\b(reception|drinks|welcome|placeholder|place ?holder|busin
  * bare word filtered out. It only reads as admin when it *names* the event:
  * "…Evening Social", "…Lunchtime Social", "…Social Hour". */
 const SOCIAL_EVENT = /\bsocial\s*$|\bsocial\s+(hour|event|evening|night)\b/i;
+
+/* A named exception to the length rule, and named on purpose.
+ *
+ * `description.length < 200` is a proxy for "there is nothing here to match on",
+ * and it is right about six of the seven sessions it catches on its own — two at
+ * 0 characters, three at 3, and a briefing whose actual walkshop is listed
+ * separately with 3,321. It is wrong about the REF 2029 sub-panel, which is a
+ * real session people choose to attend and describes itself in 176 characters.
+ *
+ * The tempting fix is to move the threshold. Don't: admitting 176 while still
+ * excluding the 142-character briefing means picking a number in (142, 176],
+ * which is this same exception with the evidence filed off — invisible in the
+ * source, unexplained, and silently re-tuned to one programme. An exception you
+ * can read is better than a constant you can't.
+ *
+ * It is checked before everything else, so a listed session is never admin. That
+ * costs nothing today (this title matches neither regex) and means the rule says
+ * what it means. data.test.mjs asserts this matches exactly one session, so if
+ * the programme renames or drops it the check fails loudly instead of leaving
+ * dead prose behind. */
+const NOT_ADMIN = /\bResearch Excellence Framework\b/i;
+
 function isAdminSession(s) {
   if (s.papers.length > 0) return false;
+  if (NOT_ADMIN.test(s.title)) return false;
   return s.description.length < 200 || ADMIN_TITLE.test(s.title) || SOCIAL_EVENT.test(s.title);
 }
 

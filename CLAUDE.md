@@ -1042,16 +1042,30 @@ and diff the ids before believing the headline. What it cannot see at all is the
 would pass the monitor while every route quietly went stale.
 
 One thing surfaced by re-checking the admin filter against new data, per the
-rule above, and left alone: **Research Excellence Framework (REF) 2029 — meet
-the Geography and Environmental Studies sub-panel** is excluded from every
-agenda by `description.length < 200`, at 176 characters. It is a real session
-people would choose, and it is the length heuristic rather than the socials
-regex — the same rule that already drops *Film Geographies (Plenary)* at 3
-chars. Not changed, because the threshold is programme-wide and 176 characters
-is genuinely too thin to match on; noted so the next person doesn't rediscover
-it as a bug. The two other new exclusions check out: the *Arboreal-human
+rule above: **Research Excellence Framework (REF) 2029 — meet the Geography and
+Environmental Studies sub-panel** was excluded from every agenda by
+`description.length < 200`, at 176 characters. It is a real session people
+choose to attend, and it was the length heuristic rather than the socials regex
+that caught it. The two other new exclusions check out: the *Arboreal-human
 intra-actions Walkshop Briefing* is dropped while the walkshop itself (3,321
 chars) is kept, and *Metroland Cultures Fringe Event* has no description at all.
+
+**`NOT_ADMIN` is the exception, and the reason it is a named regex rather than a
+tuned threshold is worth keeping.** The length rule catches seven sessions on its
+own, and is right about six: two at 0 characters, three at 3, and the walkshop
+briefing at 142 whose real session is listed separately. Admitting 176 while
+still excluding 142 means choosing a constant in (142, 176] — which is this
+exception with the evidence filed off, invisible in the source and silently
+tuned to one programme. An exception you can read beats a constant you can't.
+
+It is tested rather than trusted, because a hand-written exception outlives the
+thing it was written for: `data.test.mjs` asserts it matches **exactly one**
+session and that the session would otherwise be filtered. Both failure modes
+were replayed. A rename or a drop makes it match nothing — a dead exception,
+which is invisible from the page. And an over-broad one is worse than it sounds:
+`NOT_ADMIN` is checked *first*, so it overrides the socials regexes too, and
+loosening it to `/\bResearch\b/` rescued 54 sessions including every AGM and
+evening social. The check fails on both.
 
 Real room names arrived long and repetitive — 500+ of 593 end in ", Imperial
 College London" — so `venueLabel` strips the host institution for display and
