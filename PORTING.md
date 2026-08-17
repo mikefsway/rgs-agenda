@@ -286,6 +286,17 @@ browser re-derives it at load and throws on a mismatch. Keep that. And **re-run
 `embed.py` after any `normalize.py` change**, including one that touches no
 text at all.
 
+`embed.py` ships a `content_sig` too — djb2 over everything in `sessions.json`
+the page reads — and that is what a returning visitor's saved route is checked
+against, so a refresh that changed anything drops the route and asks for a
+re-chart. Keep it for the reason it exists: it replaced a count of sessions and
+facets, which catches a programme that gained or lost sessions and misses one
+that only *edited* them. This repo shipped a fix that changed 183 strings and
+rewrote the entire matrix with both counts identical, and every saved route
+restored against it as if nothing had happened. If you re-implement the hash in
+another language, iterate **code points** — the JS and Python versions here
+disagreed on two emoji until the test caught it.
+
 ---
 
 ## 3. Embed

@@ -48,6 +48,32 @@ function orderSig(list) {
 }
 ok("sessions.json row order matches meta.order_sig", orderSig(sessions) === meta.order_sig,
   `sessions are ${orderSig(sessions)}, matrix was built for ${meta.order_sig} — re-run pipeline/embed.py`);
+
+/* Re-derived here rather than trusted, for the same reason as order_sig: this
+ * is what decides whether a returning visitor's saved route still describes the
+ * programme, and it fails by being silently too permissive. A stale content_sig
+ * means routes restore against data that has moved on — the 13 Aug 2026 entity
+ * fix, where both counts stayed put while 183 strings changed. Mirrors
+ * content_sig in pipeline/embed.py; keep the two in step. */
+const FS = "\u001f", RS = "\u001e";   // must match pipeline/embed.py exactly
+function contentSig(list) {
+  const parts = [];
+  for (const s of list) {
+    parts.push(["id", "eid", "title", "description", "start", "end",
+      "venue", "mode", "code", "group", "type"].map((k) => `${s[k] ?? ""}`).join(FS));
+    for (const p of s.papers) parts.push([p.title ?? "", ...(p.affiliations ?? [])].join(FS));
+  }
+  // Code points, not UTF-16 units: python's ord() walks code points, and the
+  // programme has two emoji in it (a session description with cherry blossom).
+  // charCodeAt would hash the surrogate halves and disagree with embed.py on
+  // exactly the sessions nobody thinks to test.
+  let h = 5381;
+  for (const ch of parts.join(RS)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0;
+  return h.toString(36);
+}
+ok("meta.content_sig describes the shipped sessions.json",
+  contentSig(sessions) === meta.content_sig,
+  `sessions hash to ${contentSig(sessions)}, meta says ${meta.content_sig} — re-run pipeline/embed.py`);
 ok("meta.n_sessions matches sessions.json", meta.n_sessions === sessions.length,
   `${meta.n_sessions} vs ${sessions.length}`);
 ok("meta.n_facets matches facets.json", meta.n_facets === facets.length,

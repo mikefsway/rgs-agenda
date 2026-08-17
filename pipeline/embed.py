@@ -48,6 +48,52 @@ def chunk(text: str) -> list[str]:
     return parts
 
 
+# Separators written as escapes, never as literal control bytes in source:
+# docs/app.js has to produce the same string, and an invisible character is
+# not something two files can be checked against each other by eye.
+FS = "\u001f"   # between fields of a record
+RS = "\u001e"   # between records
+
+
+def djb2(s: str) -> str:
+    h = 5381
+    for ch in s:
+        h = ((h * 33) ^ ord(ch)) & 0xFFFFFFFF
+    return np.base_repr(h, 36).lower()
+
+
+def content_sig(sessions: list[dict]) -> str:
+    """djb2 over everything in sessions.json the page reads, in row order.
+
+    This is what tells a returning visitor's saved route whether the programme
+    it describes still exists. The old test was `n_facets|n_sessions`, which
+    answers a much narrower question — it catches a refresh that adds or removes
+    sessions and misses one that only *edits* them. That is not hypothetical:
+    the entity fix of 13 Aug 2026 changed 183 strings and rewrote the whole
+    matrix while leaving both counts identical, so every saved route restored
+    silently against data it was not built from, keeping stale evidence labels
+    and scores that pins and dismissals then went on re-ranking from.
+
+    Deliberately derived from the shipped sessions.json alone, not from the
+    embedded `texts`: it is re-derived in test/data.test.mjs, and a signature
+    that depended on chunk() would make that test a reimplementation of the
+    chunker rather than an independent check. A chunking change moves n_facets
+    anyway. app.js only reads this field; test/data.test.mjs is the one that
+    re-derives it, so keep those two in step — and note that the JS side has to
+    iterate *code points*, because ord() does and charCodeAt() does not. The
+    programme contains two emoji, which is enough to make the two disagree.
+    """
+    parts: list[str] = []
+    for s in sessions:
+        parts.append(FS.join(str(s.get(k, "")) for k in (
+            "id", "eid", "title", "description", "start", "end",
+            "venue", "mode", "code", "group", "type")))
+        for p in s["papers"]:
+            parts.append(FS.join([p.get("title", ""),
+                                  *(p.get("affiliations") or [])]))
+    return djb2(RS.join(parts))
+
+
 def order_sig(sessions: list[dict]) -> str:
     """djb2 over the session ids, in row order.
 
@@ -59,11 +105,7 @@ def order_sig(sessions: list[dict]) -> str:
     signature lets the browser refuse the pairing outright. Mirrors profileSig
     in docs/app.js; keep the two implementations in step.
     """
-    s = "|".join(str(x["id"]) for x in sessions)
-    h = 5381
-    for ch in s:
-        h = ((h * 33) ^ ord(ch)) & 0xFFFFFFFF
-    return np.base_repr(h, 36).lower()
+    return djb2("|".join(str(x["id"]) for x in sessions))
 
 
 def main() -> None:
@@ -90,7 +132,8 @@ def main() -> None:
     (DATA / "facets.json").write_text(json.dumps(facets, ensure_ascii=False))
     (DATA / "meta.json").write_text(json.dumps({
         "model": MODEL, "dim": int(mat.shape[1]), "n_facets": int(mat.shape[0]),
-        "n_sessions": len(sessions), "order_sig": order_sig(sessions), "dtype": "float16",
+        "n_sessions": len(sessions), "order_sig": order_sig(sessions),
+        "content_sig": content_sig(sessions), "dtype": "float16",
         "query_prefix": "Represent this sentence for searching relevant passages: ",
     }))
     print(f"{mat.shape[0]} facets x {mat.shape[1]} dims -> embeddings.bin "

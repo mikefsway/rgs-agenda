@@ -211,11 +211,23 @@ function assertOrder(meta, sessions) {
   }
 }
 
-// A saved route is only valid against the data it was built from, so a refresh
-// silently discards it. Not the embedding cache, which holds the user's own
-// vectors and outlives any programme — see embCacheKey.
+/* A saved route is only valid against the data it was built from, so a refresh
+ * discards it. Not the embedding cache, which holds the user's own vectors and
+ * outlives any programme — see embCacheKey.
+ *
+ * `content_sig` (pipeline/embed.py) hashes everything in sessions.json the page
+ * reads. This used to be `n_facets|n_sessions`, which answers a much narrower
+ * question: it catches a refresh that adds or removes sessions and misses one
+ * that only edits them. The entity fix of 13 Aug 2026 was exactly that — 183
+ * strings and the whole matrix rewritten, both counts unchanged — so every
+ * saved route restored against data it wasn't built from, keeping evidence
+ * labels and scores that pins and dismissals then re-ranked from.
+ *
+ * The fallback is for a data build that predates the field: it is the old
+ * behaviour, which is weaker but not wrong, and a port that hasn't re-run
+ * embed.py should not be met with a blank page. */
 function dataSig() {
-  return `${DATA.meta.n_facets}|${DATA.sessions.length}`;
+  return DATA.meta.content_sig || `${DATA.meta.n_facets}|${DATA.sessions.length}`;
 }
 
 function loadEmbedder() {
@@ -1256,10 +1268,22 @@ function saveRoute() {
   try { localStorage.setItem(ROUTE_KEY, JSON.stringify(slim)); } catch { /* fraglet still saves */ }
 }
 
+/* Set when a saved route was thrown away because the programme moved under it —
+ * as opposed to there never having been one. Without this the two cases look
+ * identical from the page: a returning visitor finds their boxes still full and
+ * their agenda gone, with nothing said. The route is deleted at the same time,
+ * so the note is shown once and not on every load afterwards. */
+let routeDropped = false;
+
 function restoreRoute() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(ROUTE_KEY) || "null"); } catch { return false; }
-  if (!saved || saved.dataSig !== dataSig() || !saved.results?.length) return false;
+  if (!saved || !saved.results?.length) return false;
+  if (saved.dataSig !== dataSig()) {
+    routeDropped = true;
+    try { localStorage.removeItem(ROUTE_KEY); } catch { /* fine */ }
+    return false;
+  }
   // A route may only render as "Your route" for the profile that produced it.
   // The boxes are refilled from the fraglet before this runs, so a mismatch
   // means the input changed since charting — discard rather than masquerade.
@@ -2092,6 +2116,8 @@ function renderAll({ restored = false, scroll = false } = {}) {
   }
 
   $("#results").hidden = false;
+  // Whatever the note was explaining, there is a current route now.
+  $("#dropped-note").hidden = true;
   refreshStale();
   refreshInstNote();   // needs DATA, which only exists once a route has been charted
   if (nowSlot) nowSlot.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2596,7 +2622,15 @@ try {
 loadData()
   // resolveMine before restoreRoute, for the reason in the comment above the
   // flag load: the route promotes sessions the user is presenting in.
-  .then(() => { setStatus(""); resolveMine(); restoreRoute(); return loadEmbedder(); })
+  .then(() => {
+    setStatus("");
+    resolveMine();
+    restoreRoute();
+    // Only worth saying to someone who had a route: a first-time visitor has
+    // nothing to have lost, and would read it as an error.
+    if (routeDropped) $("#dropped-note").hidden = false;
+    return loadEmbedder();
+  })
   .then(() => setStatus(""))
   // ...with one exception: a missing docs/data/ is not a transient failure that
   // retrying will fix, and saying so on load beats letting someone fill in the

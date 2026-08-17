@@ -844,14 +844,41 @@ one.
 
 ## Persistence and caching — three layers, three invalidation rules
 
-- **The route** (`traverse.rgs2026.route.v1`) stores ids + display strings,
+- **The route** (`traverse.rgs2026.route.v2`) stores ids + display strings,
   never session objects; sessions are re-joined to fresh data on load. It
-  carries a `dataSig` (`n_facets|n_sessions`) and is silently discarded on
-  mismatch — a route pointing at merged-away sessions is worse than no route.
+  carries a `dataSig` and is discarded on mismatch — a route pointing at
+  merged-away sessions is worse than no route. **`dataSig` is `content_sig`
+  since 17 Aug 2026, and used to be `n_facets|n_sessions`, which answered a
+  narrower question than the one being asked.** Counts catch a refresh that adds
+  or removes sessions and miss one that only *edits* them: the entity fix of 13
+  Aug 2026 changed 183 strings and rewrote the whole matrix with both counts
+  identical, so every saved route restored silently against data it wasn't built
+  from — stale evidence labels, and stale scores that pins and dismissals went on
+  re-ranking from, since those work off the scores held in memory. `embed.py`
+  now stamps a djb2 over everything in `sessions.json` the page reads, and
+  `data.test.mjs` re-derives it rather than trusting it. Note for anyone
+  re-implementing it: the JS side must iterate **code points**, not UTF-16
+  units — the programme contains two emoji, and that is enough to make `ord()`
+  and `charCodeAt()` disagree. It was caught by the re-derivation on the first
+  run, which is the argument for writing one.
+- **Discarding is now visible.** `#dropped-note` says the programme changed and
+  asks for a re-chart, set from `routeDropped` in `restoreRoute`. It fires only
+  where a route was actually thrown away, never on a first visit, and the route
+  is deleted at the same moment so it shows once. The profile is untouched — it
+  lives in the fraglet key, so the boxes are still full and only the agenda is
+  gone, which is precisely why the silence read as a bug rather than as an
+  expected consequence of a refresh.
 - **Profile embeddings** (`traverse.embcache.*`) are keyed by raw chunk text
   and namespaced by model **and device**: webgpu-fp16 and wasm-q8 vectors agree
   to ~2dp, not exactly, and mixing them shifts scores that everything
   downstream reads as ranks. This cache is why a goals edit re-plans in <1s.
+  **It is deliberately *not* keyed on the data.** It was until 17 Aug 2026, and
+  that was a plain mistake: these are vectors of the user's own text, and the
+  programme has no say in what a paper title embeds to. Every refresh threw away
+  a whole valid profile — a free ~10s re-embed on the one visit that also has to
+  rebuild the route — and orphaned the old blob, since the startup sweep only
+  knew about pre-v2 namespaces. The route describes the programme; the cache
+  describes the person. Different lifetimes, different keys.
 - **The service worker** (`docs/sw.js`) serves same-origin stale-while-
   revalidate: a deploy lands on the visit *after* next. When testing locally,
   remember the browser's plain HTTP cache sits in front of everything —
@@ -868,7 +895,7 @@ which made row order a function of a display field. Filling in the 164 missing
 rooms therefore permuted `sessions.json` while the matrix still described the
 old order: every session would have been scored against someone else's facets.
 
-Nothing existing caught it. `dataSig` is `n_facets|n_sessions` and both are
+Nothing existing caught it. `dataSig` was `n_facets|n_sessions` and both are
 identical either side of a permutation, the embedder self-check verifies the
 matrix against `facets.json` labels and never consults `sessions.json`, and the
 symptom is not an error but a plausible agenda quoting the wrong papers. The
