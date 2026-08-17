@@ -38,7 +38,12 @@
 // left holding the old matrix beside the new facets.json fails the order check
 // and gets no route at all, which is the loud version and still not one anybody
 // should have to see.
-const CACHE = "traverse-v11";
+// v12: the programme refresh of 17 Aug 2026. 593 -> 596 sessions, and the row
+// order moved (order_sig hzu07a -> d5pd89), so this is the case the check was
+// written for rather than the entity fix's near-miss: an old embeddings.bin
+// beside the new facets.json would be scoring every session against someone
+// else's papers if assertOrder didn't stop it first.
+const CACHE = "traverse-v12";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

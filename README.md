@@ -40,8 +40,8 @@ docs/                the static site (GitHub Pages serves this directory)
   build.html/build.js    "build one for your conference" — writes a porting prompt
   scholar.js             deterministic cleanup for pasted publication lists
   sw.js                  service worker: shell + data cached for offline use
-  data/sessions.json     593 sessions, 2,217 paper titles (1.7 MB)
-  data/embeddings.bin    3,309 facets x 384 dims, float16 (2.5 MB)
+  data/sessions.json     596 sessions, 2,218 paper titles (1.7 MB)
+  data/embeddings.bin    3,314 facets x 384 dims, float16 (2.5 MB)
   data/facets.json       row -> session mapping + evidence labels
   fonts/                 IBM Plex, self-hosted (320 kB) — no Google Fonts call
 test/                no deps, no runner — plain node scripts

@@ -44,7 +44,28 @@ const ROUTE_KEY = "traverse.rgs2026.route.v2";
  * that should evaporate because someone edited their goals box. Neither feeds
  * profileSig for the same reason — they change what the page says, never what
  * it scored, and folding them in would throw away a perfectly good route. */
-const MINE_KEY = "traverse.rgs2026.mine.v1";
+/* v2 stores `eid`, not `id`, and that is the whole point of the bump.
+ *
+ * The flag has to survive a programme refresh — it is the only state here that
+ * does, since the route is thrown away by dataSig and the profile by profileSig
+ * — so it is the only place where the *stability* of a session key is load-
+ * bearing rather than incidental. `id` turned out not to have it. On the 17 Aug
+ * 2026 refresh four sessions were re-published under a new `id` while keeping
+ * their `eid`, their title and their hour:
+ *
+ *     id 166 -> 1091, 1081 -> 1089, 1082 -> 1090, 398 -> 1088   (eids unchanged)
+ *
+ * A stored id then resolves to nothing and the flag vanishes without a symptom,
+ * on the one marker in this tool whose cost of being missed is real. Measured
+ * over that refresh, an eid join survives 5 of the 9 breakages an id join takes,
+ * and the 4 it does not survive are sessions genuinely dropped from the
+ * programme — where losing the flag is the correct answer, not a failure.
+ *
+ * Only storage changes. `mine` is still a Set of `id` in memory, because in
+ * memory it can only ever mean the programme currently loaded; it is the
+ * round-trip through localStorage that outlives the data. */
+const MINE_KEY = "traverse.rgs2026.mine.v2";
+const MINE_KEY_V1 = "traverse.rgs2026.mine.v1";
 const INST_KEY = "traverse.rgs2026.inst.v1";
 
 // RGS-IBG research group codes (session-code prefixes) to official names.
@@ -152,11 +173,14 @@ async function fetchData() {
   const matrix = f16ToF32(new Uint16Array(binBuf));
   assertOrder(meta, sessionsDoc.sessions);
   const byId = new Map(sessionsDoc.sessions.map((s) => [s.id, s]));
+  // `byEid` exists for the one join that has to survive a programme refresh —
+  // see MINE_KEY. Everything in-memory keys on `id`; only storage uses this.
+  const byEid = new Map(sessionsDoc.sessions.map((s) => [s.eid, s]));
   // `conference` is part of the sessions.json contract (PORTING.md §2) and is
   // the one place the conference names itself, so a port gets it right without
   // touching app.js. Only the LLM brief reads it; the page says RGS-IBG in copy.
   DATA = {
-    sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta, byId,
+    sessions: sessionsDoc.sessions, facets, matrix, dim: meta.dim, meta, byId, byEid,
     conference: sessionsDoc.conference || "the conference",
   };
   const n = $("#n-sessions");
@@ -187,8 +211,9 @@ function assertOrder(meta, sessions) {
   }
 }
 
-// Route and embedding caches are only valid against the data they were built
-// from; a data refresh silently invalidates both.
+// A saved route is only valid against the data it was built from, so a refresh
+// silently discards it. Not the embedding cache, which holds the user's own
+// vectors and outlives any programme — see embCacheKey.
 function dataSig() {
   return `${DATA.meta.n_facets}|${DATA.sessions.length}`;
 }
@@ -308,14 +333,22 @@ const EMB_CACHE_MAX = 400;
  * verified) live embedder entirely. A cache namespace is only trustworthy if
  * everything ever written to it came from a verified backend, so pre-check
  * namespaces are dead, not migratable. */
-function embCacheKey() { return `traverse.embcache.v2.${EMBED_MODEL}.${EMB_DEVICE}.${dataSig()}`; }
+/* Model and device only. `dataSig()` used to be in here and should never have
+ * been: these are vectors of the *user's own text*, and the programme has no
+ * say in what "Capturing the distributional impacts of long-term low-carbon
+ * transitions" embeds to. Including it meant every programme refresh threw away
+ * a whole valid profile — a free ~10s re-embed of 67 titles on the one visit
+ * where the route also has to be rebuilt — and, because the sweep below only
+ * knew about pre-v2 namespaces, left the old blob orphaned in localStorage for
+ * good. The route and the cache genuinely have different invalidation rules:
+ * the route describes the programme, the cache describes the person. */
+function embCacheKey() { return `traverse.embcache.v2.${EMBED_MODEL}.${EMB_DEVICE}`; }
 
-// One-time sweep of the untrusted pre-check caches (and the v1 route below).
+// One-time sweep of the untrusted pre-check caches, the v1 route, and the
+// dataSig-suffixed v2 keys the line above stopped writing.
 try {
   for (const k of Object.keys(localStorage)) {
-    if (k.startsWith("traverse.embcache.") && !k.startsWith("traverse.embcache.v2.")) {
-      localStorage.removeItem(k);
-    }
+    if (k.startsWith("traverse.embcache.") && k !== embCacheKey()) localStorage.removeItem(k);
   }
   localStorage.removeItem("traverse.rgs2026.route.v1");
 } catch { /* storage disabled — nothing to sweep */ }
@@ -2065,8 +2098,31 @@ function renderAll({ restored = false, scroll = false } = {}) {
   else if (scroll) $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* Storage keys back to live sessions, once there are live sessions to key to.
+ * A v1 payload is ids and can only be read against whatever data is current, so
+ * anything re-published since it was written is already gone — which is the
+ * failure v2 exists to stop repeating, not one it can undo. Migrating rewrites
+ * the key as eids, so a device pays this at most once. */
+function resolveMine() {
+  if (!mineStored || !DATA) return;
+  const nums = (a) => (Array.isArray(a) ? a.map(Number).filter(Number.isFinite) : []);
+  if (mineStored.eids) {
+    mine = new Set(nums(mineStored.eids)
+      .map((e) => DATA.byEid.get(e)?.id)
+      .filter((id) => id !== undefined));
+  } else {
+    mine = new Set(nums(mineStored.ids).filter((id) => DATA.byId.has(id)));
+    if (mine.size) saveMine();
+    try { localStorage.removeItem(MINE_KEY_V1); } catch { /* storage disabled — nothing to clear */ }
+  }
+  mineStored = null;
+}
+
 function saveMine() {
-  try { localStorage.setItem(MINE_KEY, JSON.stringify([...mine])); } catch { /* flags are not worth failing over */ }
+  // id -> eid on the way out; a session with no eid is unlinkable and dropped
+  // rather than stored under a key that can never be read back.
+  const eids = [...mine].map((id) => DATA?.byId.get(id)?.eid).filter((e) => Number.isFinite(e));
+  try { localStorage.setItem(MINE_KEY, JSON.stringify(eids)); } catch { /* flags are not worth failing over */ }
 }
 
 /* Marking a session touches the route (it gets promoted), the papers tab and the
@@ -2498,12 +2554,18 @@ $("#works-list").addEventListener("change", (e) => {
   $("#works-count").innerHTML = worksCountHtml();
 });
 
-/* Both flags load before the saved route renders: the route promotes sessions
+/* Both flags land before the saved route renders: the route promotes sessions
  * the user is presenting in, so reading them afterwards would draw one agenda
- * and then silently replace it. */
+ * and then silently replace it. The read is here and synchronous; `mine` is
+ * only usable after resolveMine(), which needs DATA — so the ordering that
+ * matters now lives at the loadData() chain below. */
+let mineStored = null;   // raw storage payload; only resolvable once DATA exists
 try {
-  mine = new Set(JSON.parse(localStorage.getItem(MINE_KEY) || "[]").map(Number).filter(Number.isFinite));
-} catch { mine = new Set(); }
+  const v2 = localStorage.getItem(MINE_KEY);
+  mineStored = v2 !== null
+    ? { eids: JSON.parse(v2) }
+    : { ids: JSON.parse(localStorage.getItem(MINE_KEY_V1) || "[]") };
+} catch { mineStored = null; }
 try {
   instRaw = localStorage.getItem(INST_KEY) || "";
   INST = instNeedles(instRaw);
@@ -2532,7 +2594,9 @@ try {
 // plan() retries with visible status if anything failed. The route from last
 // time renders as soon as the data is in, before the model even starts.
 loadData()
-  .then(() => { setStatus(""); restoreRoute(); return loadEmbedder(); })
+  // resolveMine before restoreRoute, for the reason in the comment above the
+  // flag load: the route promotes sessions the user is presenting in.
+  .then(() => { setStatus(""); resolveMine(); restoreRoute(); return loadEmbedder(); })
   .then(() => setStatus(""))
   // ...with one exception: a missing docs/data/ is not a transient failure that
   // retrying will fix, and saying so on load beats letting someone fill in the

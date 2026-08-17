@@ -175,15 +175,24 @@ HTML-stripping and mode-parsing, both of which are reusable.
   "timezone": "Europe/London",          // IANA name; the frontend renders in it
   "sessions": [
     {
-      "id": 12345,                       // stable unique identity. localStorage
-                                         // routes are keyed on this, so it must
-                                         // not change between refreshes.
+      "id": 12345,                       // unique identity within one build.
+                                         // Saved routes join on this, which is
+                                         // safe because a refresh discards them.
       "eid": 67890,                      // the id the public site's session URL
                                          // uses. Set equal to id if they're the
                                          // same — on Ex Ordo they differ for 579
                                          // of 593 sessions, and linking on the
                                          // wrong one silently sends people to
                                          // someone else's session.
+                                         // ALSO the key for the "I'm presenting"
+                                         // flag, the one thing that must survive
+                                         // a refresh: pick whichever of your two
+                                         // ids the source keeps stable when a
+                                         // session is re-published. On Ex Ordo
+                                         // that is eid — four sessions changed
+                                         // id and kept eid on 17 Aug 2026. Guess
+                                         // wrong and the flag vanishes in
+                                         // silence.
       "code": "POLGRG3",                 // "" if the programme has no codes
       "group": "POLGRG",                 // track/stream/sponsor. "" if none.
       "title": "Political Geographies of Infrastructure",

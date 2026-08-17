@@ -996,6 +996,36 @@ refresh the four data files on four different schedules. `pipeline/embed.py`
 needs a venv with sentence-transformers (`.venv-pipeline/` if it survived);
 embedding the full programme takes ~7.5 min on this Pi.
 
+**Refreshed again 17 Aug 2026 — 596 sessions, 2,218 papers, 3,314 facets — and
+the count was a bad description of the change.** The monitor had been failing
+since the 15th on `596 vs 593`, which reads as three sessions added. What
+actually arrived: **9 gone, 12 new, and 137 of the 584 common sessions changed**
+(mostly paper lists, some venues, one retimed). Four of the nine "gone" are the
+same session back with a new id at the same hour, and *Geographies of
+inequalities and public policy for urban vulnerable populations* moved a whole
+day. Row order moved with it — `order_sig` `hzu07a` → `d5pd89`, `CACHE` v11 →
+v12.
+
+So **a total is a weak detector of a reshuffle**: three in and three out would
+have reported 0. The monitor is still right to compare counts — it is one cheap
+request per day against an API that gives a `count` for free, and it did fire —
+but read the failure as "the programme moved", never as "n sessions were added",
+and diff the ids before believing the headline. What it cannot see at all is the
+137: a refresh that only edited papers and venues, leaving the count alone,
+would pass the monitor while every route quietly went stale.
+
+One thing surfaced by re-checking the admin filter against new data, per the
+rule above, and left alone: **Research Excellence Framework (REF) 2029 — meet
+the Geography and Environmental Studies sub-panel** is excluded from every
+agenda by `description.length < 200`, at 176 characters. It is a real session
+people would choose, and it is the length heuristic rather than the socials
+regex — the same rule that already drops *Film Geographies (Plenary)* at 3
+chars. Not changed, because the threshold is programme-wide and 176 characters
+is genuinely too thin to match on; noted so the next person doesn't rediscover
+it as a bug. The two other new exclusions check out: the *Arboreal-human
+intra-actions Walkshop Briefing* is dropped while the walkshop itself (3,321
+chars) is kept, and *Metroland Cultures Fringe Event* has no description at all.
+
 Real room names arrived long and repetitive — 500+ of 593 end in ", Imperial
 College London" — so `venueLabel` strips the host institution for display and
 ICS keeps the full string, because a calendar entry is the one place the address
@@ -1074,11 +1104,21 @@ docstring; trust it over memory. It hard-fails when a day's row count doesn't
 match the API's own `count`, because a silently short read is indistinguishable
 from a programme that genuinely shrank.
 
-Two id systems: `sessions[].id` is the virtual_published_content id (stable
-row identity, used for localStorage joins); `sessions[].eid` is the
-schedule_event id, which is what the public site routes on
-(`/session/<eid>/<slug>`). They differ for 579 of 593 sessions — linking on
+Two id systems: `sessions[].id` is the virtual_published_content id;
+`sessions[].eid` is the schedule_event id, which is what the public site routes
+on (`/session/<eid>/<slug>`). They differ for 579 of 593 sessions — linking on
 `id` gives you someone else's session.
+
+**This file used to call `id` the "stable row identity, used for localStorage
+joins". It is not the stable one, and the 17 Aug 2026 refresh proved it**: four
+sessions were re-published under a new `id` while keeping their `eid`, their
+title and their hour (166→1091, 1081→1089, 1082→1090, 398→1088). Over that
+refresh an `id` join broke on 9 old sessions and an `eid` join on 4 — and those
+4 are the ones actually dropped from the programme, where a broken join is the
+right answer. So `eid` is the key for anything that must outlive a refresh,
+which is `MINE_KEY` and nothing else: the route is discarded wholesale by
+`dataSig`, so it can go on joining on `id`. `mine` is still a Set of `id` in
+memory — only the trip through localStorage crosses a refresh.
 
 **Rooms live in two different fields.** Imperial rooms arrive as
 `virtual_venue`; the 164 sessions staged in the RGS-IBG building itself have
