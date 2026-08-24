@@ -1926,6 +1926,12 @@ that one. Rules:
 - If a slot is better spent on a corridor conversation or a sit down, say that
   instead of picking something. A route with a deliberate gap in it is a better
   answer than four mediocre picks in a row.
+- Every time and room below is from a snapshot of the programme taken on
+  17 August 2026, and the conference organisers have since restricted their
+  programme so the tool cannot see changes to it. Treat times and rooms as
+  probably-right rather than current, say so if I ask you to confirm one, and
+  don't tell me a room is correct — the official programme is the only thing
+  that knows.
 - Tell me the two or three sessions across the whole week you'd least want me to
   miss, and why those.`, "");
 

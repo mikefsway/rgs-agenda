@@ -43,7 +43,15 @@
 // written for rather than the entity fix's near-miss: an old embeddings.bin
 // beside the new facets.json would be scoring every session against someone
 // else's papers if assertOrder didn't stop it first.
-const CACHE = "traverse-v12";
+// v13: Ex Ordo restricted the programme to delegates on 19 Aug 2026, so the
+// shipped copy is frozen at the 17 Aug snapshot and nothing here can tell when
+// a room moves. No data file changed — index.html, style.css and app.js did,
+// together, which is the v5 case again: the notice above the route is new
+// markup with a new rule, and the brief now carries the same caveat off the
+// site. The bump matters most for exactly the visitor this is aimed at, the one
+// running offline from a cached copy in a seminar room, who would otherwise
+// keep reading a page that says the programme was fetched on 11 August.
+const CACHE = "traverse-v13";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

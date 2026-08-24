@@ -402,6 +402,16 @@ body.working #status::before {
   border-left: 2px solid var(--ink); font-size: 0.92rem; max-width: 46rem;
 }
 
+/* Same rule as .stale-note, quieter. The stale note is a thing you can fix by
+   pressing the button again; this one is a standing condition of the data and
+   will be on the page every time it renders between now and the conference, so
+   it earns a lighter edge than a warning that expects an action. */
+.programme-note {
+  margin: 1rem 0 0; padding: 0.5rem 0 0.5rem 0.75rem;
+  border-left: 2px solid var(--ink-2); font-size: 0.92rem;
+  max-width: 46rem; color: var(--ink-2);
+}
+
 /* The two exports, alone on the row and starting at the left margin. The brief
    is first and takes the solid button, because it is the half of this tool that
    can do what the ranking can't.
