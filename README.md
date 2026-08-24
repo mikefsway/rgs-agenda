@@ -140,7 +140,16 @@ fixed threshold badges everything or nothing.
 
 ## Data provenance
 
-Programme fetched 11 August 2026 from the **public** Ex Ordo programme API
+The Ex Ordo programme became **delegates-only on 19 August 2026**: the same API
+now answers 200 with `count: 0` to anyone unauthenticated, so the programme
+shipped here is frozen at the 17 August fetch and cannot be refreshed from a
+public source. `pipeline/fetch.py` refuses to overwrite it with the empty
+result, and `test/monitor.mjs` warns instead of checking freshness. Whether a
+public mirror of a now-restricted programme should stay up is a decision for
+the repo owner, not a detail of the pipeline — see CLAUDE.md, "Data".
+
+Programme fetched 11 August 2026 (refreshed 17 August) from what was then the
+**public** Ex Ordo programme API
 (`event.ac2026.exordo.com/api/virtual_published_contents`, no auth) — the final
 programme, which replaced the July draft's placeholder rooms ("In-person 10")
 with real ones and settled the running order: 103 draft sessions went,
@@ -189,8 +198,9 @@ to fail on them.
 
 `monitor.mjs` looks outward instead: a half-deployed Pages build, jsDelivr or
 Hugging Face going away (the ~30 MB model is fetched at first visit and nothing
-works without it), or the Ex Ordo programme moving under the shipped copy. It
-runs daily in Actions, where a failing scheduled workflow is the notification.
+works without it), or the Ex Ordo programme moving under the shipped copy — that
+last one unchecked since the feed closed on 19 August, where it warns. It runs
+daily in Actions, where a failing scheduled workflow is the notification.
 
 ## Porting it to another conference
 

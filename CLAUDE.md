@@ -607,7 +607,7 @@ user is presenting in, and the rules tell the model those hours are fixed.
 ```
 node test/parse.test.mjs    # the Scholar parser
 node test/data.test.mjs     # the shipped data against itself; run after every pipeline run
-node test/monitor.mjs       # the deployed site + jsDelivr + Hugging Face + Ex Ordo
+node test/monitor.mjs       # the deployed site + jsDelivr + Hugging Face + Ex Ordo (feed closed 19 Aug: warns)
 ```
 
 `data.test.mjs` exists because every invariant in this file describes a failure
@@ -1011,7 +1011,17 @@ where every platform other than Ex Ordo will make you choose.
 
 ## Data
 
-Programme comes from the public Ex Ordo API (no auth). Refreshed to the **final
+Programme came from the public Ex Ordo API (no auth). **It is not public any
+more — since 19 Aug 2026 the programme is delegates-only**, and the API says so
+by answering 200 with `count: 0` rather than 401, which is the worst possible
+way to say it: an unauthenticated fetch looks exactly like a successful fetch of
+an empty conference. `fetch.py` now refuses to write an empty or sharply
+shrunken result (`SHRINK_FLOOR`, `--force`), and `monitor.mjs` warns rather than
+failing daily over something no one here can fix. Two consequences worth
+holding: the shipped programme is **frozen at 17 Aug** and late changes before
+1 September will not be caught, and the provenance argument that licensed
+republishing this at all — "public on the Ex Ordo programme, in context, on a
+page a human navigated to", below — no longer describes the source. Refreshed to the **final
 programme on 11 Aug 2026**: 593 sessions, 2,217 papers, 3,309 facets, and real
 rooms at last ("Skempton Building Room 301, Imperial College London" in place of
 "In-person 10"). Against the July draft, 103 sessions went and 75 arrived, so a

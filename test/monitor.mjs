@@ -19,6 +19,11 @@
  *  - the programme changing under us. Late changes before 1 September are
  *    expected, and a moved session is invisible: the route still renders, it
  *    just sends people to the wrong room at the wrong time.
+ *
+ * That last one is unchecked since 19 August 2026, when Ex Ordo restricted the
+ * programme to delegates: the API answers 200 with count 0 to anyone else. The
+ * check stays in and warns, because the day it starts returning sessions again
+ * is a day worth knowing about.
  */
 
 const BASE = (process.argv.find((a) => a.startsWith("http")) || "https://mikefsway.github.io/rgs-agenda/")
@@ -34,6 +39,13 @@ const ok = (name, cond, detail = "") => {
   return cond;
 };
 const info = (s) => say(`  info  ${s}`);
+/* Printed even under --quiet, and surfaced in the Actions summary. A warning
+ * here means a check cannot run at all, which is worth more than the noise. */
+const warn = (name, detail = "") => {
+  const line = `${name}${detail ? ` — ${detail}` : ""}`;
+  console.log(`  WARN  ${line}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning::${line}`);
+};
 
 const NO_CACHE = { headers: { "cache-control": "no-cache", pragma: "no-cache" } };
 async function head(url) {
@@ -147,8 +159,19 @@ try {
   }
   const shipped = (await (await get(BASE + "data/meta.json")).json()).n_sessions;
   info(`Ex Ordo reports ${live} sessions; the site ships ${shipped}`);
-  ok("the published programme still matches the shipped one", live === shipped,
-    `${live} vs ${shipped} — re-run the pipeline (fetch → normalize → embed), bump CACHE in docs/sw.js`);
+  if (live === 0) {
+    /* The programme went delegates-only on 19 August 2026. The API does not
+     * refuse us — it answers 200 with count 0 — so zero means the door shut,
+     * not that the conference emptied. Warn rather than fail: the site is
+     * fine, the pipeline must not be run against this (fetch.py refuses), and
+     * a check that fails every morning over something nobody here can fix is
+     * a check you stop reading, which costs more than it saves. */
+    warn("the Ex Ordo feed is no longer public, so freshness is unchecked",
+      "the shipped programme is frozen at the last public fetch; changes before 1 September will not be caught here");
+  } else {
+    ok("the published programme still matches the shipped one", live === shipped,
+      `${live} vs ${shipped} — re-run the pipeline (fetch → normalize → embed), bump CACHE in docs/sw.js`);
+  }
 } catch (e) {
   // The API changing shape is itself worth knowing about, but it is not an
   // outage of the site: a stale programme still works.

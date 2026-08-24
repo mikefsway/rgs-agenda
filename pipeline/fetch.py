@@ -14,6 +14,9 @@ plus every day's rows concatenated into `data` — so normalize.py doesn't need 
 know that paging happened.
 
     python3 pipeline/fetch.py [dest_dir]     # default: data/raw
+
+Refuses to write an empty or sharply shrunken programme over a working one; see
+SHRINK_FLOOR and `--force`.
 """
 
 from __future__ import annotations
@@ -39,6 +42,9 @@ EXPAND = (
     "virtual_stage"
 )
 PAGE_SIZE = 15  # server clamps to this anyway; asking for more just lies to you
+# A refresh replaces the whole programme, so a fetch that comes back short is
+# the one failure mode that quietly destroys data rather than making noise.
+SHRINK_FLOOR = 0.9  # of what the site already ships; below this, refuse
 
 
 def get_json(url: str, tries: int = 4) -> dict:
@@ -73,15 +79,51 @@ def fetch_day(day: str) -> dict:
     return head
 
 
+def shipped_n_sessions() -> int | None:
+    """How many sessions the deployed site currently carries, if it says."""
+    try:
+        return json.loads((ROOT / "docs" / "data" / "meta.json").read_text())["n_sessions"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None
+
+
 def main() -> None:
-    dest = Path(sys.argv[1]) if len(sys.argv) > 1 else RAW
-    dest.mkdir(parents=True, exist_ok=True)
-    total = 0
+    args = sys.argv[1:]
+    force = "--force" in args
+    positional = [a for a in args if not a.startswith("-")]
+    dest = Path(positional[0]) if positional else RAW
+
+    # Fetch everything before writing anything. A run that refuses halfway
+    # through would otherwise leave two new day files beside two old ones, and
+    # normalize.py cannot tell that apart from a real programme.
+    dumps = {}
     for day in DAYS:
-        dump = fetch_day(day)
+        dumps[day] = fetch_day(day)
+        print(f"{day}: {len(dumps[day]['data'])} records")
+    total = sum(len(d["data"]) for d in dumps.values())
+
+    empty = [day for day, d in dumps.items() if not d["data"]]
+    if empty and not force:
+        raise SystemExit(
+            f"refusing to write: no sessions for {', '.join(empty)}.\n"
+            "The API answers 200 with count=0 rather than 401 when it does not want to\n"
+            "show you the programme, so an empty fetch looks exactly like a successful\n"
+            "one. Since 19 Aug 2026 the programme is delegates-only and this is what an\n"
+            "unauthenticated fetch gets. Writing it out would replace the shipped\n"
+            "programme with nothing. --force if you really mean it."
+        )
+
+    shipped = shipped_n_sessions()
+    if shipped and total < shipped * SHRINK_FLOOR and not force:
+        raise SystemExit(
+            f"refusing to write: {total} sessions against {shipped} shipped.\n"
+            "A real programme edit moves a handful of sessions; a drop this size is the\n"
+            "API showing you less than it has. --force if you really mean it."
+        )
+
+    dest.mkdir(parents=True, exist_ok=True)
+    for day, dump in dumps.items():
         (dest / f"day_{day}.json").write_text(json.dumps(dump, ensure_ascii=False))
-        total += len(dump["data"])
-        print(f"{day}: {len(dump['data'])} records")
     print(f"{total} records -> {dest}")
 
 
