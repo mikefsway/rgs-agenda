@@ -1730,11 +1730,14 @@ function downloadIcs() {
  * carries a deep shortlist rather than the four picks the page draws, because
  * the LLM's whole job is to reach for something the cosine put fifth.
  *
- * SHORTLIST_PER_SLOT is set from measurement, not taste: at 14 the brief is
- * ~120 kB / ~30k tokens on the real fixture, which every current model takes
- * comfortably and which claude.ai converts to an attachment on paste. Raising
- * it is cheap in tokens and gets steadily less useful — by rank 14 the sessions
- * are ones the profile barely touches.
+ * SHORTLIST_PER_SLOT is set from measurement, not taste. It stayed at 14 through
+ * the 25 Aug 2026 pass that halved the brief, because the depth was never what
+ * made it long: with the tiers below, ranks 7–14 cost about 170 words a slot
+ * between them, and cutting to 10 would have saved 12% of §3 while giving up the
+ * ranks the deep shortlist exists for — on a profile saying "I now work on AI
+ * agents" the useful finds sat at 11 and 14. Raising it is cheap and gets
+ * steadily less useful; by rank 14 the sessions are ones the profile barely
+ * touches.
  *
  * This is the one feature here that sends the user's text off the device. The
  * note under the button used to say so outright; that came out on 14 Aug 2026,
@@ -1749,24 +1752,51 @@ const SHORTLIST_PER_SLOT = 14;
  * construction; carrying its full abstract costs about a kilobyte and buys
  * nothing, while its title and its paper titles are what let the model spot
  * that it is the one thing all week about the subject I actually asked for.
- * Measured on the real fixture: flat payload gave 266 kB, tiered gives ~150 kB
- * for the same 185 sessions, and the part that got cut is the part no reader
- * would have reached. */
+ *
+ * The tiers were re-cut on 25 Aug 2026 after the brief was reported as 31k
+ * words, and the measurement said the cost was never the depth. Counting §3
+ * over the shipped programme at 14 per slot: convenor prose 9,400 words (the
+ * pick's own untruncated abstract alone was 5,500 of them, for 28 sessions),
+ * paper titles 8,700, headings 4,000. So abstracts were 42% of the payload,
+ * and dropping the shortlist from 14 to 10 saves less than a tenth of it once
+ * they are trimmed — which is the argument for cutting prose and keeping every
+ * rank, not the other way round. §3 measures 22.1k words before and 13.8k
+ * after, on the same 222 sessions.
+ *
+ * Three things follow, and each is a claim about what the model reads:
+ *
+ * - The pick is capped like everything else. It is the session the reader has
+ *   already seen on the page and §2 has already named with its evidence line;
+ *   what the model needs from it is the papers, which stay complete.
+ * - An abstract earns its place *inversely* to the paper list. Where a session
+ *   has papers, the paper titles are the better description — more specific,
+ *   and written about the actual talks. Where it has almost none (a workshop, a
+ *   panel, a plenary), the abstract is the only content there is, so a thin
+ *   session keeps one and a fat one does not.
+ * - The tail keeps paper titles but loses room and code. Nobody navigates to a
+ *   room from rank 11, and the brief says in as many words that times and rooms
+ *   are a 17 August snapshot. */
 const TIERS = {
-  pick:  { desc: Infinity, papers: Infinity, evidence: true },
-  near:  { desc: 340, papers: 12, evidence: true },    // ranks 2–6
-  tail:  { desc: 0, papers: 6, evidence: false },      // 7 and down
+  pick:  { desc: 600, papers: Infinity, evidence: true, meta: true },
+  near:  { desc: 400, thinOnly: true, papers: 8, evidence: true, meta: true },  // ranks 2–6
+  tail:  { desc: 0, papers: 3, evidence: false, meta: false },                  // 7 and down
 };
 const NEAR_DEPTH = 6;
+// Below this, the paper list is too short to describe the session on its own.
+const THIN_PAPERS = 3;
 
 function briefSession(r, tier) {
   const s = r.session;
   const bits = [`### ${s.title}`];
-  const meta = [`${dayShort(s.day)} ${t(s.start)}–${t(s.end)}`, venueLabel(s) || "venue tbc"];
-  if (s.code) meta.push(s.code);
+  const meta = [`${dayShort(s.day)} ${t(s.start)}–${t(s.end)}`];
+  if (tier.meta) {
+    meta.push(venueLabel(s) || "venue tbc");
+    if (s.code) meta.push(s.code);
+  }
   bits.push(meta.join(" · "));
-  const desc = tier.desc === Infinity ? s.description : trunc(s.description || "", tier.desc);
-  if (tier.desc && desc) bits.push(desc.replace(/\n+/g, " "));
+  const wantDesc = tier.desc && (!tier.thinOnly || s.papers.length < THIN_PAPERS);
+  const desc = wantDesc ? trunc((s.description || "").replace(/\n+/g, " ").trim(), tier.desc) : "";
+  if (desc) bits.push(desc);
   if (s.papers.length) {
     const shown = tier.papers === Infinity ? s.papers : s.papers.slice(0, tier.papers);
     bits.push(shown.map((p) => `- ${p.title}`).join("\n"));
@@ -1857,6 +1887,157 @@ And the matching cannot do "not" — if something up there is work I have moved 
 from, it will go on pulling those sessions towards me however I word the box
 below. Saying so is one of the things you can do and it cannot.`, "");
   return out;
+}
+
+/* The short brief — the same job under a hard character budget.
+ *
+ * The full brief measures ~160 kB and every model here takes it comfortably;
+ * several chat boxes do not. Copilot caps a pasted message at 4,000 characters
+ * in its default mode and 8,000 in the others, and a brief that is refused at
+ * the paste is worth nothing however good it is. So this is not the long brief
+ * with the middle deleted — it is built to a budget, and what the budget buys
+ * is decided in priority order.
+ *
+ * Two things about how it spends it, both of which are the point:
+ *
+ * - **Breadth before depth.** The remaining budget is filled a rank at a time
+ *   across every slot — every slot gets its runner-up before any slot gets a
+ *   third option. A long brief can afford 14 deep in one slot; a short one that
+ *   did the same would hand the model a fully-worked argument about Tuesday
+ *   morning and nothing at all about Thursday.
+ * - **It says what it dropped.** The footer names the number of sessions not
+ *   listed and tells the model to ask for any of them, because the user has the
+ *   page open and can paste one. A silent cap reads as "that was everything",
+ *   which is the one impression this file must not leave.
+ *
+ * SHORT_BRIEF_CHARS is under 8,000 rather than at it, because the paste box is
+ * counting the same characters and a message that lands at 7,999 is a message
+ * with no room for the sentence the user writes above it. */
+const SHORT_BRIEF_CHARS = 7400;
+// Session titles here run to 150 characters. Past this a title is identifying
+// itself, not describing itself, and the budget is better spent on another slot.
+const SHORT_TITLE_CHARS = 88;
+
+function shortBriefHead() {
+  return `# Help me finish my ${DATA.conference} agenda
+
+I've run the whole programme through a matching tool: it read every session and
+every paper in them and ranked them against my work. Below is the route it
+produced (✓) with the sessions it ranked next in each slot, in its order.
+
+What I want from you is the judgement it can't do. It compares text to text, so
+it can't tell that I've had enough of a topic, that a title matched on a framing
+word and is about something else, or what's already in my diary. Before you
+answer, ask me two or three questions that would actually change it, and use
+what you already know about me from previous conversations — say when you do.
+
+Then give me one pick per slot, in time order, with a sentence on why. Rules:
+only sessions listed here, no inventing one; say where you disagree with the ✓
+and why; treat a high rank as a hint, not a verdict — it is cosine similarity
+from a small model, biased towards sessions with more papers, and it cannot do
+"not this". Hours marked ✱ are mine and fixed. If a slot is better spent on a
+corridor conversation, say so instead of picking something. Times and rooms come
+from a snapshot taken on 17 August 2026 and may have moved since.
+
+Ask me for the full abstract and paper list of anything below — I have them
+open, and this is a summary of a much longer document.`;
+}
+
+function buildShortBrief() {
+  if (!STATE?.agenda) return "";
+  const { days } = STATE.agenda;
+  const rank = new Map(STATE.results.map((r, i) => [r.session.id, i + 1]));
+  const cut = (s) => trunc(s || "", SHORT_TITLE_CHARS);
+
+  const out = [shortBriefHead(), ""];
+
+  // 1. Me. The goals box is the statement of intent and goes in whole where it
+  // can; the works box never does — at 67 titles it would be the entire budget.
+  // What replaces it is the per-paper shares, which is the half the model can
+  // act on: it says what the route rests on rather than what I have written.
+  out.push("## Me", "");
+  const goals = $("#goals").value.trim();
+  out.push(goals ? trunc(goals, 700) : "_(I didn't write anything about what I want from the week.)_", "");
+  const wp = STATE.worksPick;
+  const shares = wp?.winGap && wp.worksSig === worksSig($("#works").value.trim())
+    ? Object.entries(wp.wins).map(([title, v]) => [title, v.gap / wp.winGap])
+        .filter(([, s]) => s >= BRIEF_SHARE_MIN).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    : [];
+  if (shares.length) {
+    out.push(`The tool matched on ${wp.used} of my ${wp.total} papers. These are the ones the route`
+      + ` rests on most — the share of it that would change if the paper weren't in the box:`, "");
+    out.push(...shares.map(([title, s]) => `- ${Math.round(100 * s)}% — ${cut(title)}`), "");
+    out.push(`That is attribution, not intent. If something up there is work I've moved on from,`
+      + ` the tool will go on pulling those sessions towards me whatever I say — you can fix that`
+      + ` and it can't.`, "");
+  }
+  if (instRaw.trim()) out.push(`I'm at ${instRaw.trim()}, so papers from there are colleagues rather than strangers.`, "");
+  const own = DATA.sessions.filter((sx) => mine.has(sx.id));
+  if (own.length) {
+    out.push(`I'm presenting in: ${own.map((sx) => `${cut(sx.title)} (${dayShort(sx.day)} ${t(sx.start)})`).join("; ")}.`
+      + ` Those hours are spoken for.`, "");
+  }
+
+  /* 2. The route, and then as many alternatives as fit. The picks go in first
+   * whatever they cost — a brief missing an hour of the route isn't short, it's
+   * wrong — and the runners-up compete for what's left. */
+  out.push("## My route, with what else was running", "");
+  const lines = [];   // [slotIndex, rank within slot, text]
+  const alts = [];    // same shape, added a level at a time below
+  let listed = 0, total = 0;
+  [...days].forEach(([day, slots]) => {
+    lines.push([day, -1, `### ${dayName(day)}`]);
+    slots.forEach((slot) => {
+      const mark = slot.own ? " ✱ I'm presenting" : slot.pinned ? " (I pinned this)" : "";
+      const head = `**${t(slot.start)}–${t(slot.end)}** · ${slot.parallel} running`;
+      const pick = slot.weak
+        ? `${head} — nothing scored well. Best guess: ${cut(slot.pick.session.title)}`
+        : `${head}${mark}\n✓ ${cut(slot.pick.session.title)} (#${rank.get(slot.pick.session.id)} of ${STATE.results.length})`;
+      lines.push([day, 0, pick]);
+      listed++;
+      total += (slot.ranked || []).length;
+      (slot.ranked || []).filter((r) => r !== slot.pick).forEach((r, i) => {
+        const tag = r === slot.clashWith ? " — too close to call between these two" : "";
+        alts.push([day, i + 1, `  ${cut(r.session.title)}${tag}`, lines.length, slot.pick.score - r.score]);
+      });
+    });
+  });
+
+  /* Spend what's left a rank at a time, and within a rank on the closest calls
+   * first. Two rules, and the second one only matters because the first leaves
+   * change on the table: every slot gets its runner-up before any slot gets a
+   * third, and when the budget runs out mid-rank the sessions that get the last
+   * lines are the ones nearest the pick's score — a slot whose winner is half a
+   * standard deviation clear of everything is not where a second opinion is
+   * needed. Measured: level-at-a-time alone stopped at 6,533 of 7,400
+   * characters, an unspent 870 that is nine more sessions. */
+  const footer = `_The tool ranked all ${DATA.sessions.length} sessions. This lists 000 of the 0000 running in `
+    + `my slots — the rest scored lower for me, but "lower" is the tool's opinion, not mine. Ask and `
+    + `I'll paste any session in full, or the long version of this brief._`;
+  let spent = out.join("\n").length + lines.reduce((a, l) => a + l[2].length + 2, 0) + footer.length;
+  const chosen = [];
+  const maxLevel = Math.max(0, ...alts.map((a) => a[1]));
+  fill: for (let level = 1; level <= maxLevel; level++) {
+    const tier = alts.filter((a) => a[1] === level).sort((a, b) => a[4] - b[4]);
+    for (const a of tier) {
+      if (spent + a[2].length + 1 > SHORT_BRIEF_CHARS) break fill;
+      spent += a[2].length + 1;
+      chosen.push(a);
+      listed++;
+    }
+  }
+  // Back into slot order: sort by the position of the slot's pick, then by rank.
+  chosen.sort((a, b) => (a[3] - b[3]) || (a[1] - b[1]));
+  const merged = [];
+  lines.forEach((l, i) => {
+    merged.push(l[2]);
+    if (l[1] === 0) merged.push(...chosen.filter((c) => c[3] === i + 1).map((c) => c[2]));
+    if (l[1] !== -1) merged.push("");
+  });
+  out.push(...merged);
+
+  out.push(footer.replace("000 of the 0000", `${listed} of the ${total}`));
+  return out.join("\n");
 }
 
 function buildBrief() {
@@ -1981,10 +2162,13 @@ that one. Rules:
   out.push("---", "", "## 3. Everything I could go to instead", "");
   out.push(
 `For each timeslot, in the tool's rank order — the top ${SHORTLIST_PER_SLOT} of however many
-were running. Deeper down the list you get the title and the papers but not the
-abstract: those are there so you can spot one, not so you can read them all. Ask
-me and I'll paste the full text of any of them. Socials, receptions and AGMs are
-filtered out and aren't here at all.`, "");
+were running. What each entry carries is the title and the papers in it, which
+is what the session is actually about. Convenors' framing text is cut short or
+left out entirely, except where a session has almost no papers and the framing
+is all there is. Deeper down the list you also lose the room. None of that is
+hidden from you — ask me and I'll paste the full text of any of them, and do ask
+if a title looks promising and the papers don't settle it. Socials, receptions
+and AGMs are filtered out and aren't here at all.`, "");
   for (const [day, slots] of days) {
     out.push(`### ${dayName(day)}`, "");
     for (const slot of slots) {
@@ -2004,13 +2188,18 @@ filtered out and aren't here at all.`, "");
   return out.join("\n");
 }
 
-async function copyBrief(btn) {
-  const text = buildBrief();
+async function copyBrief(short) {
+  const text = short ? buildShortBrief() : buildBrief();
   if (!text) return;
   const hint = $("#llm-hint");
+  // The short one reports characters, not kB, because characters are the unit
+  // the box it is meant for counts in.
+  const size = short
+    ? `${text.length.toLocaleString()} characters`
+    : `${Math.round(text.length / 1024)} kB`;
   try {
     await navigator.clipboard.writeText(text);
-    hint.textContent = `Copied — ${Math.round(text.length / 1024)} kB. Paste it into Claude, ChatGPT or whatever you use.`;
+    hint.textContent = `Copied — ${size}. Paste it into Claude, ChatGPT or whatever you use.`;
   } catch {
     // Clipboard needs a secure context and a permission; falling back to a
     // download beats a button that silently does nothing.
@@ -2536,7 +2725,10 @@ function downloadFraglet() {
 $("#plan-btn").addEventListener("click", plan);
 $("#save-fraglet").addEventListener("click", downloadFraglet);
 $("#ics-btn").addEventListener("click", downloadIcs);
-$("#llm-btn").addEventListener("click", (e) => copyBrief(e.currentTarget));
+$("#llm-btn").addEventListener("click", () => copyBrief(false));
+// Optional-chained because a split deploy can land this file next to an
+// index.html without the button, and a throw here kills every listener below.
+$("#llm-short-btn")?.addEventListener("click", () => copyBrief(true));
 
 /* The count is the whole safety mechanism, the same way detectOwner prints the
  * name it inferred: "UCL" and "University College London" catch different halves

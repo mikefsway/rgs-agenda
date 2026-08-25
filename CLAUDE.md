@@ -162,17 +162,76 @@ Three things about it are load-bearing:
   If this is ever tightened again, the thing to say is what's in the payload,
   not where it goes. `PORTING.md` §8 carries the same correction, since a port
   reading the old rule would keep a sentence for a reason that has changed.
-- **The shortlist is deep and tiered.** 14 per slot, not the 4 the page draws,
-  because the LLM's entire job is to reach for something the cosine put ninth.
-  But rank 12 of a 45-way slot is a weak match by construction, so the payload
-  drops by tier: the pick gets its full abstract and every paper, ranks 2–6 get
-  340 characters and 12 papers, and the tail gets title, time and six paper
-  titles. Flat payload measured 266 kB on the real fixture; tiered is 201 kB for
-  the same 185 sessions, and what got cut is what nobody would have read.
-  It works — on a profile saying "I now work on AI agents", the 09:00 slot put
-  *AI and Climate* at rank 11 and *Uneven and Contested Geographies of Data
-  Centers* at 14, both far below the fold of the page and both obviously worth
-  surfacing to a reader who knows what the profile means.
+- **The shortlist is deep and tiered, and the depth was never the cost.** 14 per
+  slot, not the 4 the page draws, because the LLM's entire job is to reach for
+  something the cosine put ninth. It works — on a profile saying "I now work on
+  AI agents", the 09:00 slot put *AI and Climate* at rank 11 and *Uneven and
+  Contested Geographies of Data Centers* at 14, both far below the fold of the
+  page and both obviously worth surfacing to a reader who knows what the profile
+  means.
+
+  The tiers were re-cut on **25 Aug 2026**, after the brief was reported as
+  31k words and measured at **30,608 words / 214 kB** on the real fixture. The
+  §3 breakdown is the whole argument: convenor prose 9,189 words, paper titles
+  10,842, evidence lines 2,735, headings and time/room lines 4,003 — over 190
+  sessions. So the length was **prose, not coverage**, and dropping the shortlist
+  from 14 to 10 would have saved about a tenth of it while giving up exactly the
+  ranks the deep list exists for. Cutting the prose instead: the pick's abstract
+  is capped at 600 characters (its papers stay complete — it is the session the
+  reader has already seen and §2 has already named), ranks 2–6 get an abstract
+  **only when the session has fewer than three papers**, and the tail keeps three
+  paper titles but loses room and code. **30,608 → 23,311 words, 214 → 160 kB**,
+  same 190 sessions, same 14 ranks.
+
+  The rule underneath the middle tier: **an abstract earns its place inversely to
+  the paper list.** Where a session has papers, the paper titles are the better
+  description — more specific, and written about the actual talks; where it has
+  almost none, the convenor's framing is the only content there is.
+
+  One thing to know before predicting a payload: **the shortlist skews long.**
+  Simulating these tiers over an arbitrary 14 of each slot predicted 13.8k words
+  for §3 and the real run came back 19.8k, because the sessions that *rank*
+  highest are systematically the big ones — the facet-count bias in "Known,
+  measured, not fixed" is a bias towards sessions with more papers and longer
+  descriptions. Measure a payload change on a real route, not on a sample of the
+  programme.
+- **There are two briefs, and the short one is built to a character budget —
+  added 25 Aug 2026.** Even at 160 kB the full brief is refused by several chat
+  boxes: Copilot caps a pasted message at 4,000 characters in its default mode
+  and 8,000 in the others, and a brief that cannot be pasted is worth nothing
+  however good it is. `buildShortBrief` targets **7,400 characters** — under
+  8,000 rather than at it, because the box counts the same characters and a
+  message landing at 7,999 leaves no room for the sentence the user writes above
+  it. Measured on the real fixture: **7,338 characters, 1,160 words**, against
+  160 kB / 23,311 for the long one.
+
+  It is not the long brief with the middle deleted. Three things decide what the
+  budget buys:
+
+  - **The picks go in whatever they cost.** A brief missing an hour of the route
+    isn't short, it's wrong. Everything else competes for what's left.
+  - **Breadth before depth, then closest-call first.** The remainder is filled a
+    rank at a time across every slot — every slot gets its runner-up before any
+    slot gets a third — and when the budget runs out mid-rank, the last lines go
+    to the sessions nearest the pick's score. A slot with a runaway winner is not
+    where a second opinion is needed. Filling level-at-a-time alone stopped at
+    6,533 characters and left 870 unspent, which is nine more sessions.
+  - **It says what it dropped**: 47 of the 559 sessions running in the user's
+    slots, named as such in the footer, with an offer to paste any of them in
+    full. A silent cap reads as "that was everything", which is the impression
+    this tool must never leave.
+
+  The works box cannot go in verbatim — at 67 titles it is the whole budget — so
+  what replaces it is the **per-paper gap shares**, top five. That is the half a
+  model can act on: it says what the route rests on rather than what the user has
+  written. The goals box does go in whole, capped at 700 characters, because it
+  is the statement of intent and it is short.
+
+  Note the split-deploy hazard the second button introduced, which is new in kind
+  here: `index.html` and `app.js` must now arrive together. Old `app.js` plus new
+  markup is a dead button; new `app.js` plus old markup **throws at module init
+  and takes every listener registered after it down with it**. Hence `CACHE` v14
+  and the `?.` on that one listener — the belt for the braces.
 - **It asks for questions before answers.** The prompt tells the model to ask
   two or three clarifying questions first and to use what it already knows about
   the user from previous conversations — which is the actual reason to prefer

@@ -51,7 +51,7 @@
 // site. The bump matters most for exactly the visitor this is aimed at, the one
 // running offline from a cached copy in a seminar room, who would otherwise
 // keep reading a page that says the programme was fetched on 11 August.
-const CACHE = "traverse-v13";
+const CACHE = "traverse-v14";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "scholar.js",
   "data/meta.json", "data/sessions.json", "data/facets.json", "data/embeddings.bin",

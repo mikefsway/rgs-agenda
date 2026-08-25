@@ -124,12 +124,14 @@
   <div id="view-route" class="view" role="tabpanel" aria-label="Route">
     <div class="route-actions">
       <button id="llm-btn" class="primary" type="button">Copy a brief for your own AI</button>
+      <button id="llm-short-btn" class="ghost" type="button">Copy a short version</button>
       <button id="ics-btn" class="ghost" type="button">Download calendar (.ics)</button>
     </div>
     <p class="llm-note">Paste it into Claude, ChatGPT or whatever you use. It includes your route
     and a longlist for every slot, and permits a more sophisticated analysis than this page --
     what you've had enough of, what's in your diary (if connected), anything your AI of choice
-    already knows about you.</p>
+    already knows about you. The short version fits under 7,400 characters, for chat boxes that
+    cap what you can paste -- your route, the runners-up in each slot, and no abstracts.</p>
     <p class="hint" id="llm-hint" hidden></p>
     <nav id="day-tabs" class="day-tabs" aria-label="Conference days"></nav>
     <div id="route"></div>

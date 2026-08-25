@@ -563,9 +563,13 @@ does that is under the impression the text stayed put. The sentence was telling
 people something they had just decided.
 
 What is worth saying, if you say anything, is **what is in the payload** — that
-is the part the user cannot see. The brief carries both profile boxes verbatim,
-not just the route, and a reader who assumed it was a list of session titles
-would be wrong about it. Describe the contents; skip the geography.
+is the part the user cannot see. The long brief carries both profile boxes
+verbatim, not just the route, and a reader who assumed it was a list of session
+titles would be wrong about it. Describe the contents; skip the geography.
+
+If you ship the short brief alongside it, note that the two payloads differ: the
+short one carries the goals box verbatim but only five titles out of the works
+box, so one sentence cannot honestly describe both buttons.
 
 The line that stays either way is the one on the landing page. Adding a *silent*
 network call — telemetry, a hosted embedding API, a "share your route" link —
