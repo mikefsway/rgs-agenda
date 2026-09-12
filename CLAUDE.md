@@ -1092,6 +1092,21 @@ refresh the four data files on four different schedules. `pipeline/embed.py`
 needs a venv with sentence-transformers (`.venv-pipeline/` if it survived);
 embedding the full programme takes ~7.5 min on this Pi.
 
+**The conference is over — 1-4 September 2026 — and the programme is now an
+archive.** `data.test.mjs`'s freshness check ("the programme is still in the
+future") therefore failed on every scheduled run and every push from 6
+September, over a fact nobody can change: the data is history because the
+conference is. It now *warns* for this one programme, pinned by
+`ARCHIVED_FIRST_DAY = "2026-09-01"`, on the same reasoning `monitor.mjs`
+already applies to the closed Ex Ordo feed — a check that fails every morning
+over something nobody here can fix is a check you stop reading.
+
+The guard is pinned, not deleted, so it is live again the moment a programme
+with any other first day is shipped: the 2027 one, or a botched pipeline run
+that lands the wrong dates, still fails if it is already in the past. **When the
+2027 programme ships, move that constant** (and expect the warning to go quiet
+by itself until that conference ends).
+
 **Refreshed again 17 Aug 2026 — 596 sessions, 2,218 papers, 3,314 facets — and
 the count was a bad description of the change.** The monitor had been failing
 since the 15th on `596 vs 593`, which reads as three sessions added. What

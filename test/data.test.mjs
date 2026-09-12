@@ -27,6 +27,13 @@ const ok = (name, cond, detail = "") => {
   console.log(`  ${cond ? "ok  " : "FAIL"}  ${name}${cond || !detail ? "" : ` — ${detail}`}`);
   if (!cond) failures++;
 };
+/* As in monitor.mjs: a warning is for a check that cannot meaningfully run,
+ * as against one that ran and failed. Surfaced in the Actions summary. */
+const warn = (name, detail = "") => {
+  const line = `${name}${detail ? ` — ${detail}` : ""}`;
+  console.log(`  WARN  ${line}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning::${line}`);
+};
 
 const meta = json("docs/data/meta.json");
 const { sessions } = json("docs/data/sessions.json");
@@ -215,11 +222,39 @@ heading("freshness");
 
 const gen = json("docs/data/sessions.json").generated_from || "";
 console.log(`  info  generated from ${gen || "(unrecorded)"}`);
-const firstDay = [...new Set(sessions.map((s) => s.day))].sort()[0];
+const programmeDays = [...new Set(sessions.map((s) => s.day))].sort();
+const firstDay = programmeDays[0];
+const lastDay = programmeDays[programmeDays.length - 1];
 const daysToGo = Math.round((Date.parse(firstDay + "T00:00:00Z") - Date.now()) / 86400000);
-console.log(`  info  ${daysToGo} days until the conference opens (${firstDay})`);
-ok("the programme is still in the future", daysToGo > -5,
-  "the conference has been and gone — this data is history");
+const daysSinceEnd = Math.floor((Date.now() - Date.parse(lastDay + "T23:59:59Z")) / 86400000);
+console.log(daysToGo > 0
+  ? `  info  ${daysToGo} days until the conference opens (${firstDay})`
+  : `  info  the conference opened ${-daysToGo} days ago (${firstDay} to ${lastDay})`);
+/* RGS-IBG 2026 ran 1-4 September 2026. From 6 September this check failed
+ * every morning, and on every push, over something nobody can fix: the data is
+ * history because the conference is, and no amount of re-running the pipeline
+ * will put it back in the future. That is the same situation as the Ex Ordo
+ * feed going delegates-only, and it gets the same treatment for the same
+ * reason monitor.mjs gives there — a check that fails daily over something
+ * nobody here can fix is a check you stop reading, which costs more than it
+ * saves.
+ *
+ * The guard is pinned rather than deleted, because it earns its keep on the
+ * next cycle. It is silenced only for the one programme we know to be an
+ * archive; ship a programme with any other first day — the 2027 one, or a
+ * botched pipeline run that lands the wrong dates — and the check is live
+ * again and fails if that programme is already past. Moving this constant is
+ * then a deliberate one-line acknowledgement by whoever ships the new
+ * programme, which is exactly when someone is already editing here. */
+const ARCHIVED_FIRST_DAY = "2026-09-01";
+
+if (firstDay === ARCHIVED_FIRST_DAY && daysToGo <= -5) {
+  warn("the programme is an archive of RGS-IBG 2026",
+    `it ended ${daysSinceEnd} days ago (${lastDay}); freshness is unchecked until the 2027 programme ships`);
+} else {
+  ok("the programme is still in the future", daysToGo > -5,
+    "the conference has been and gone — this data is history");
+}
 
 // The service worker version has to move whenever the data does, or the four
 // files refresh on four different schedules and can disagree in a live browser.
