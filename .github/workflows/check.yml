@@ -3,20 +3,22 @@
 # `tests` runs on every push and guards the repo: the Scholar parser, and the
 # data files against each other. It is the gate on a pipeline run.
 #
-# `monitor` runs on a schedule and watches the deployed site and the things it
-# depends on that nobody here controls — jsDelivr, Hugging Face, and the Ex Ordo
-# programme. It fails loudly rather than quietly, because a failing scheduled
-# workflow is the notification: GitHub emails the repo owner.
+# `monitor` watches the deployed site and the things it depends on that nobody
+# here controls — jsDelivr, Hugging Face, and the Ex Ordo programme. It ran
+# daily until the conference was over; the schedule was removed on 17 Nov 2026
+# because the site is an archive nobody is maintaining, and GitHub had already
+# auto-disabled the cron after 60 days without a push. Run it by hand
+# (workflow_dispatch) if you want to know the site is still up. To bring the
+# daily run back for a 2027 programme, restore:
+#
+#   schedule:
+#     - cron: "12 7 * * *"   # not on the hour: GitHub queues :00 together
 
 name: check
 
 on:
   push:
   pull_request:
-  schedule:
-    # 07:12 UTC daily. Not on the hour: GitHub queues everyone who asked for
-    # :00 together, and a monitor that runs late is a monitor you stop trusting.
-    - cron: "12 7 * * *"
   workflow_dispatch:
 
 # Neither job writes anything, and a public repo gets pull requests from people
@@ -39,9 +41,9 @@ jobs:
       - run: node test/data.test.mjs
 
   monitor:
-    # Only on a schedule or by hand: on a push the site hasn't deployed yet, so
-    # it would check the previous version and report on the wrong thing.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Only by hand: on a push the site hasn't deployed yet, so it would check
+    # the previous version and report on the wrong thing.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
