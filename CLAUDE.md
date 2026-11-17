@@ -690,9 +690,12 @@ so it hasn't been made.
 
 `monitor.mjs` watches what this repo can't fix: a half-deployed Pages build (the
 four data files are only meaningful as a set), jsDelivr or Hugging Face going
-away, or the programme moving. It runs daily in Actions, where the failing
-workflow *is* the notification. Point it at localhost to check a build before
-pushing.
+away, or the programme moving. It ran daily in Actions until 17 Nov 2026, where
+the failing workflow *was* the notification; the schedule came out once the
+conference was over and nobody was maintaining the archive (GitHub had already
+auto-disabled it for inactivity). It is `workflow_dispatch` only now — restore
+the cron in `check.yml` for a 2027 programme. Point it at localhost to check a
+build before pushing.
 
 ## Copy edits go through the tool, not the file
 
